@@ -248,12 +248,16 @@ scripts/
 
 ## 已验证连通性（仅供参考）
 
-以下为本机实际跑通「连接 → 收发消息 → Agent 回复」链路的记录，仅供参考——实际可用性取决于你的凭证与平台侧配置，不代表随时可用。
+以下为代码中内置、均曾实际跑通「连接 → 收发消息 → Agent 回复」链路的通道与 Agent（部分在其它机器验证）；仅供参考，实际可用性取决于你的凭证与平台侧配置。
 
-| 类型 | 名称 | 验证内容 |
+| 类型 | 名称 | 用途 |
 | --- | --- | --- |
-| IM 通道 | 飞书 `feishu` | 企业自建应用长连接：收消息、归一化、流式回复全部通过 |
-| Agent | WorkBuddy `workbuddy` | 安装并登录 `codebuddy` 后驱动办公任务，正常回复 |
+| IM 通道 | 飞书 `feishu` | 企业自建应用长连接收发消息 |
+| IM 通道 | 企业微信 `wecom` | 智能机器人长连接收发消息 |
+| Agent | SiliconFlow `siliconflow` | 聊天（SSE 流式、多轮历史） |
+| Agent | Qoder `qoder` | 编码 |
+| Agent | WorkBuddy `workbuddy` | 办公 |
+| Agent | Trae `trae` | 编码 |
 
 ## 常见问题
 
