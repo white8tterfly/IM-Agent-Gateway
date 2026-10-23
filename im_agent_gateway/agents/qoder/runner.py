@@ -93,6 +93,11 @@ class QoderRunner(BaseAgent):
     # ---------- 入口 ----------
 
     @property
+    def available(self) -> bool:
+        """Qoder CN CLI 是否可执行；未安装时注册中心拒绝开启。"""
+        return shutil.which(self.cfg.qoder_bin) is not None
+
+    @property
     def default_model(self) -> str:
         return self.cfg.qoder_model
 

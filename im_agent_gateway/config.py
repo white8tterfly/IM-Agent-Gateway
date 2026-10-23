@@ -21,6 +21,10 @@ class Config:
     secret: str
     wecom_ws_url: str = "wss://openws.work.weixin.qq.com"
 
+    # ---- 飞书机器人（长连接模式，App ID / App Secret） ----
+    feishu_app_id: str = ""
+    feishu_app_secret: str = ""
+
     # ---- Qoder CN 编码 Agent ----
     qoder_cwd: str = ""
     qoder_model: str = ""
@@ -117,6 +121,8 @@ def load_config(env_file: Path | None = None) -> Config:
         bot_id=_env("BOT_ID"),
         secret=_env("SECRET"),
         wecom_ws_url=_env("WECOM_WS_URL") or "wss://openws.work.weixin.qq.com",
+        feishu_app_id=_env("FEISHU_APP_ID"),
+        feishu_app_secret=_env("FEISHU_APP_SECRET"),
         qoder_cwd=_env("QODER_CWD") or str(PROJECT_ROOT),
         qoder_model=_env("QODER_MODEL"),
         qoder_permission_mode=_env("QODER_PERMISSION_MODE") or "accept_edits",
@@ -155,14 +161,22 @@ def load_config(env_file: Path | None = None) -> Config:
         log_level=(_env("LOG_LEVEL") or "INFO").upper(),
     )
 
-    if cfg.default_agent not in ("siliconflow", "qoder"):
-        cfg.default_agent = "siliconflow"
+    # 默认 Agent 须在 AGENTS 声明中（注册制校验），不在则回退到声明列表第一个
+    if cfg.default_agent not in cfg.agents:
+        cfg.default_agent = cfg.agents[0] if cfg.agents else ""
 
+    # 必填校验按平台接入声明（CHANNELS）进行：只校验实际接入的通道所需凭证
     missing = []
-    if not cfg.bot_id:
-        missing.append("BOT_ID")
-    if not cfg.secret:
-        missing.append("SECRET")
+    if "wecom" in cfg.channels:
+        if not cfg.bot_id:
+            missing.append("BOT_ID")
+        if not cfg.secret:
+            missing.append("SECRET")
+    if "feishu" in cfg.channels:
+        if not cfg.feishu_app_id:
+            missing.append("FEISHU_APP_ID")
+        if not cfg.feishu_app_secret:
+            missing.append("FEISHU_APP_SECRET")
     if missing:
         raise RuntimeError(
             f"缺少必填配置: {', '.join(missing)}，"
