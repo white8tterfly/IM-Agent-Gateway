@@ -1,0 +1,21 @@
+# Python 运行时产物
+__pycache__/
+*.py[cod]
+
+# 环境与凭证（保密凭证在上一级目录 .env，同样不入库）
+.env
+.venv/
+venv/
+
+# 运行时文件
+logs/
+status
+.trae_trajectories/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+
+# 系统文件
+Thumbs.db
+.DS_Store
