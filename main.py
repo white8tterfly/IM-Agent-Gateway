@@ -36,17 +36,19 @@ def setup_logging(level: str) -> None:
 
 
 def check_prereqs(cfg) -> None:
-    """启动前检查 CLI 可用性与工作目录。"""
+    """按平台接入声明（AGENTS）检查已声明 Agent 的 CLI 可用性。
+
+    注册制下，Agent 通过 AGENTS 声明参与接入；这里只对「已声明」的 Agent 提示
+    CLI 缺失（warning，不退出），实际启停由各 Agent 的 available 属性决定。
+    未在 AGENTS 中声明的 Agent 不检查、不加载、不参与路由。
+    """
     logger = logging.getLogger("main")
-    bin_path = shutil.which(cfg.qoder_bin)
-    if bin_path is None:
-        logger.error("未找到 %s，请先安装 Qoder CN CLI（npm install -g @qodercn-ai/qoderclicn）", cfg.qoder_bin)
-        sys.exit(1)
-    logger.info("Qoder CN CLI: %s", bin_path)
+    if "qoder" in cfg.agents and shutil.which(cfg.qoder_bin) is None:
+        logger.warning("未找到 %s，Qoder CN（编码）不可用；安装：npm install -g @qodercn-ai/qoderclicn", cfg.qoder_bin)
+    if "workbuddy" in cfg.agents and shutil.which(cfg.workbuddy_bin) is None:
+        logger.warning("未找到 %s，WorkBuddy（办公）不可用；安装：npm install -g @tencent-ai/codebuddy-code", cfg.workbuddy_bin)
     if not cfg.qoder_cwd_resolved.is_dir():
         logger.warning("工作目录不存在: %s（可用 /cd 切换）", cfg.qoder_cwd_resolved)
-    if shutil.which(cfg.workbuddy_bin) is None:
-        logger.warning("未找到 %s，WorkBuddy（办公）不可用；安装：npm install -g @tencent-ai/codebuddy-code", cfg.workbuddy_bin)
 
 
 # ---------- 启动流程 ----------
@@ -88,6 +90,15 @@ async def amain() -> None:
 
 
 def main() -> None:
+    # 飞书通道依赖的 lark-oapi 必须在 asyncio.run 之前导入：其长连接客户端
+    # 在 import 时会用 asyncio.get_event_loop() 缓存一个 loop，若等到 asyncio.run
+    # 运行期间（动态加载通道时）才导入，会缓存到正在运行的 loop，导致启动报
+    # "This event loop is already running"。提前导入可让它缓存到尚未运行的独立 loop。
+    try:
+        import lark_oapi  # noqa: F401
+    except ImportError:
+        pass
+
     try:
         asyncio.run(amain())
     except KeyboardInterrupt:
