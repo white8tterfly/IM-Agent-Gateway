@@ -224,6 +224,7 @@ im_agent_gateway/
     registry.py      Gateway 注册中心（register / run / close）
     channels/        各 IM 通道目录（每个 IM 一个子目录，暴露 Channel 类即可接入）
       wecom/         示例通道：企业微信智能机器人（长连接，纯协议层 + 报文归一化）
+      feishu/        示例通道：飞书企业自建应用（lark-oapi 长连接，归一化 + 流式回复）
   router/            路由层：归一化消息分发（IM 无关）
     dispatcher.py    消息路由：框架命令（/agent、/help、/status）、白名单、Agent 分发与指令转发、流式回复
     jev_router.py    决策路由：调用决策模型网关，失败/低置信度自动降级
@@ -244,6 +245,15 @@ scripts/
 ```
 
 > `channels/wecom/` 与 `agents/` 下各目录均为验证接入契约的**实验性示例**：实现思路可参考，真实使用请替换为生产级通道与 Agent。
+
+## 已验证连通性（仅供参考）
+
+以下为本机实际跑通「连接 → 收发消息 → Agent 回复」链路的记录，仅供参考——实际可用性取决于你的凭证与平台侧配置，不代表随时可用。
+
+| 类型 | 名称 | 验证内容 |
+| --- | --- | --- |
+| IM 通道 | 飞书 `feishu` | 企业自建应用长连接：收消息、归一化、流式回复全部通过 |
+| Agent | WorkBuddy `workbuddy` | 安装并登录 `codebuddy` 后驱动办公任务，正常回复 |
 
 ## 常见问题
 
