@@ -120,22 +120,29 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 
 | 页面 | 地址 | 用途 |
 | --- | --- | --- |
-| 管理台 | `http://127.0.0.1:8790` | 运行状态、通道连接、空闲倒计时、Agent 开关、进行中与最近任务、日志尾部、脱敏配置 |
+| 管理台 | `http://127.0.0.1:8790` | 运行状态、通道连接、空闲倒计时、Agent 开关、进行中与最近任务、日志尾部、配置查看与修改 |
 | 聊天台 | `http://127.0.0.1:8790/chat.html` | 浏览器直连 Agent：自动路由、指令、会话记忆、任务排队、流式回复与 IM 消息完全一致 |
 
 端口（`WEBUI_PORT`）由 webui 通道与睡眠态托管共用：服务运行时由服务占用，服务睡眠时（开启 `WATCH_HTTP_ENABLED=1`）由看门狗轻量页面接管，唤醒按钮按下后先停托管再拉起服务，端口交接无冲突。HTTP 仅绑定 `127.0.0.1`（本机访问）；聊天台身份为 `WEBUI_USER_ID`（默认 `webui`），若设置了 `ALLOWED_USERS` 白名单须包含它。
 
 ## 多入口管理（CLI）
 
-`manage.py` 与 IM 指令、Web 管理台操作同一管理命令层：Agent 开关在三处行为一致且写回 `.env`，重启后保持。
+`manage.py` 与 IM 指令、Web 管理台操作同一管理命令层：Agent 开关与配置修改在三处行为一致且写回 `.env`，重启后保持。
 
 | 命令 | 依赖服务 | 说明 |
 | --- | --- | --- |
-| `python manage.py config show` | 否 | 展示当前生效配置（敏感值已隐藏） |
+| `python manage.py config show` | 否 | 展示当前生效配置：常用 / 高级分组，每项带通俗名称与含义说明（敏感值已隐藏） |
 | `python manage.py config check` | 否 | 检查通道必填项、白名单与 Agent 前置条件，给出可读建议 |
-| `python manage.py config set KEY VALUE` | 否 | 修改配置并写回项目 `.env`（重启生效） |
+| `python manage.py config set KEY VALUE` | 否 | 修改配置并写回项目 `.env`（重启生效）；未登记的键会被拒绝，敏感项留空视为不修改 |
 | `python manage.py status` / `agents` | 是 | 服务状态与 Agent 列表（打管理端点；不可达时提示服务睡眠中或未启动） |
 | `python manage.py agent on\|off <名称>` | 是 | 开关 Agent，与 `/agent on\|off`、Web 管理台行为一致 |
+
+### 配置管理说明
+
+- 管理台「配置」区：常用配置直接展示，一般不用改的收在「高级设置」折叠区；每项都有通俗名称与一句含义说明，点「修改」就地编辑保存，开关型配置点击即保存。
+- 保存写回的是项目 `.env`，页面提示「已保存，重启服务后生效」——服务重启前仍按旧值运行，已保存的新值带「待重启」角标。
+- 敏感凭证（密钥、令牌）只显示为 `******`；修改时留空保存表示保持原值不变，填新值则更换。
+- 三入口（管理台页面、CLI `config set`、REST 端点）走同一套校验与写回实现；新增配置若未登记说明，会以只读方式出现在「未登记配置」区，避免凭空消失。
 
 ## 平台接入契约
 
