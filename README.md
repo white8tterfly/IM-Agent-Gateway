@@ -13,7 +13,7 @@
         │  gateway/ 网关：多 IM 通道接入（实现 IMChannel 并在 CHANNELS 声明即接入）
         ▼
 IM-Agent Gateway 桥接服务（Python asyncio，本机运行）
-        │  router/ 路由：框架命令（切换/开关 Agent）+ 消息分发（决策模型路由，失败降级关键词正则）
+        │  router/ 路由：框架命令（切换/开关 Agent）+ 消息分发（两级决策路由：用途 → 复杂度，失败降级关键词）
         ├──▶ Agent 聊天类（通用问答）
         ├──▶ Agent 编码类（写代码 / 修 bug / 跑命令 / git 操作）
         └──▶ Agent 办公类（文档 / 表格 / 日常自动化）
@@ -27,7 +27,7 @@ IM-Agent Gateway 桥接服务（Python asyncio，本机运行）
 | --- | --- |
 | 多 IM 接入 | 实现 `IMChannel` 即可接入新 IM；消息统一归一化为 `InboundMessage`，路由层不感知具体协议 |
 | 多 Agent 接入 | 实现 `BaseAgent` 即可接入新 Agent；统一 `submit/stop/reset/busy` 接口，会话级并发控制 |
-| 智能路由 | 默认由决策模型根据消息内容在已开启的 Agent 间自动选择（含置信度），未配置或失败/低置信度时自动退化为关键字意图解析（按各 Agent 声明的意图关键词计分选路） |
+| 智能路由 | 两级决策：先由决策模型判定消息用途（对话 / 编码 / 办公），再在同类 Agent 中按问题复杂度选具体 Agent；未配置或失败/低置信时退化为用途关键词计分，同用途多 Agent 时取声明顺序第一个 |
 | 框架命令 | `/agent`（切换/开关 Agent）、`/help`、`/status` 由平台提供；Agent 特有指令由各 Agent 自行声明并参与帮助展示 |
 | 流式回复 | 平台定义统一流式发送接口（`send_stream`）；不支持流式的 IM 可退化为整条发送 |
 | 会话管理 | 每个 IM 会话（单聊 / 群聊）分别维护各 Agent 的独立会话与记忆，`/reset` 一键清空 |
@@ -71,7 +71,7 @@ python main.py
 
 | 操作 | 说明 |
 | --- | --- |
-| 单聊直接发消息 | 自动路由：由决策模型路由到最合适的 Agent（不可用时按编码关键词降级） |
+| 单聊直接发消息 | 自动路由：由决策模型按用途与问题复杂度两级选择最合适的 Agent（不可用时按关键词降级） |
 | 群里 @机器人 | 内容为 `@机器人名 任务描述`，@ 前缀由通道层剥离 |
 | `/agent <名称>\|auto` | 框架命令：固定到某个 Agent / 恢复自动路由 |
 | `/agent on\|off <名称>` | 框架命令：运行时开启/关闭 Agent（无需重启） |
@@ -179,7 +179,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 | 数据 | 提供方式 | 说明 |
 | --- | --- | --- |
 | `name` / `label` | 类属性 | 注册名（路由与 `/agent` 命令用）/ 展示名（帮助与状态里出现） |
-| `kind` | 类属性 | `chat` / `coding`，关键词兜底路由用 |
+| `kind` | 类属性 | 用途：`chat`（对话）/ `coding`（编码）/ `office`（办公），两级路由第一级决策依据；可在 `.env` 用 `AGENT_KINDS` 按名覆写 |
+| `complexity` | 实例属性，可选 | 复杂度档位：`simple` / `mid` / `complex`；同用途多 Agent 时参与第二级选择，可在 `.env` 用 `AGENT_COMPLEXITY` 按名配置 |
 | `routing_hint` | 类属性，可选 | 自动路由的候选描述，留空按 kind 生成默认 |
 | 凭证等配置 | `.env` → `Config` | 构造时从 cfg 读取，并反映到 `available` |
 
@@ -207,7 +208,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 
 ## 行为说明
 
-- **消息路由**：默认自动路由——先由决策模型根据消息内容在已开启的 Agent 中选择最优者（含概率与置信度）；决策模型未配置、调用失败或置信度低于阈值时，退化为关键字意图解析——按各 Agent 声明的意图关键词（`routing_keywords`）对消息计分，得分最高的 Agent 胜出，全部未命中则走默认 Agent；`/agent` 可把某会话固定到任一 Agent。
+- **消息路由（两级）**：默认自动路由分两级——第一级判定消息**用途**（对话 / 编码 / 办公，已开启 Agent 只涉及一种用途时跳过决策直接进入第二级）；第二级在该用途的已开启 Agent 中选具体 Agent：仅一个直接返回，多个且 `COMPLEXITY_ROUTE=1` 且候选都已配置档位（`AGENT_COMPLEXITY`）时，由决策模型按**问题复杂度**选档位，其余情况取 `.env` 声明顺序第一个。决策模型未配置、调用失败或置信度低于阈值时，第一级退化为用途关键词计分（编码 / 办公内置词表，全部未命中走默认 Agent 所在用途）；`/agent` 可把某会话固定到任一 Agent（不进两级决策）。用途与档位配置见 [`.env.example`](./.env.example) 的「Agent 用途与难度分档」段。
 - **Agent 开关**：启动时按 `.env` 的 `ENABLED_AGENTS` 决定初始开关；运行中可发 `/agent on|off <名称>` 动态启停，全部关闭时消息会提示先开启。
 - **会话记忆**：每个 IM 会话（单聊 userid / 群聊 chatid）分别维护各 Agent 的会话状态；`/reset` 清空当前路由 Agent 的会话记忆。
 - **任务队列**：同一会话内任务串行执行，执行期间新消息自动排队；编码/办公类 Agent 全局默认同时只跑一个任务，避免多会话并发改同一目录。
@@ -239,8 +240,9 @@ im_agent_gateway/
       feishu/        示例通道：飞书企业自建应用（lark-oapi 长连接，归一化 + 流式回复）
       webui/         示例通道：本机 Web 控制台（HTTP + WebSocket；页面在项目根 webui/，见「Web 控制台」节）
   router/            路由层：归一化消息分发（IM 无关）
-    dispatcher.py    消息路由：框架命令（/agent、/help、/status）、白名单、Agent 分发与指令转发、流式回复、空闲判定
-    jev_router.py    决策路由：调用决策模型网关，失败/低置信度自动降级
+    dispatcher.py    消息路由：框架命令（/agent、/help、/status）、白名单、两级路由编排（用途决策 → 用途内档位/顺序选择）、流式回复、空闲判定
+    jev_router.py    决策路由：两级 choice 决策（用途 / 复杂度档位），失败/低置信度自动降级
+    keyword_router.py  关键词意图路由：Jev 未配置/失败/低置信时的退化选路（Agent 级 + 用途级词表）
   agents/            Agent 系统（注册与运行时开关）
     base.py         BaseAgent 抽象基类 + AgentResult（统一接口）
     registry.py     AgentRegistry 注册中心（按名注册、查询与开关）
@@ -261,8 +263,10 @@ scripts/
   test_channel_push.py     send_push 契约测试：默认退化与覆写（无网络依赖）
   test_idle_monitor.py     空闲判定测试：阈值、inflight、replay 整条回传（无网络依赖）
   test_watch_flow.py       唤醒全流程测试：占位/交接/拉起/释放（monkeypatch，无网络依赖）
-  test_jev_route.py      决策路由连通性测试
-  test_keyword_route.py    关键字意图路由测试：Jev 未配置/失败时的退化选路（无网络依赖）
+  test_jev_route.py      决策路由测试：两级 choice 请求与解析、短路、低置信退化（无网络依赖）
+  test_keyword_route.py    关键字意图路由测试：Jev 未配置/失败时的退化选路（Agent 级 + 用途级，无网络依赖）
+  test_kind_config.py      用途与档位配置测试：AGENT_KINDS/AGENT_COMPLEXITY 覆写、非法值告警忽略（无网络依赖）
+  test_dispatcher_route.py 两级路由编排测试：用途决策 / 档位选择 / 退化路径全链路（MockTransport，无网络依赖）
   test_list_cmds.py      Agent 指令列表测试
   test_env_persist.py    .env 写回测试：保注释 / 缺键追加 / 原子替换（无网络依赖）
   test_manage_commands.py 管理命令层测试：开关三入口一致性 + 写回联动（无网络依赖）
