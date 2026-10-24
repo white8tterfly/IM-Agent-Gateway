@@ -37,7 +37,9 @@ class BaseAgent(ABC):
 
     name: ClassVar[str] = ""      # 注册名，如 "qoder" / "siliconflow"
     label: ClassVar[str] = ""     # 展示名，如 "Qoder CN（编码）"
-    kind: ClassVar[str] = "chat"  # "coding"=编码意图自动路由命中；"chat"=普通聊天
+    # 用途三值（两级路由第一级）："chat"=对话；"coding"=编码；"office"=办公。
+    # 类默认可被 .env 的 AGENT_KINDS 按实例覆写，故不用 ClassVar 限定。
+    kind: str = "chat"
     routing_hint: ClassVar[str] = ""  # 决策路由（Jev）的候选描述；空串则按 kind 生成默认
     # 意图关键词（关键字路由用）：Jev 未配置/失败/低置信时，按这些词对消息做简单
     # 命中计分选路。不声明的 coding Agent 默认继承内置编码词表，其余默认为空。
@@ -45,6 +47,9 @@ class BaseAgent(ABC):
 
     def __init__(self) -> None:
         self._models: dict[str, str] = {}  # chat_key -> 会话模型覆盖（/model 切换）
+        # 复杂度档位（两级路由第二级）：simple / mid / complex，空 = 未声明。
+        # 由 .env 的 AGENT_COMPLEXITY 覆写；仅同用途多 Agent 时参与选择。
+        self.complexity: str = ""
 
     # ---------- 元信息 ----------
 
@@ -76,6 +81,8 @@ class BaseAgent(ABC):
             return self.routing_hint
         if self.kind == "coding":
             return "编码任务：写代码、修复 bug、运行命令、git 操作、仓库文件读写"
+        if self.kind == "office":
+            return "办公任务：文档、表格、PPT 等办公文件处理与办公自动化"
         return "日常聊天与通用问答"
 
     @property
