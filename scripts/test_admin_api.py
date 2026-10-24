@@ -190,6 +190,8 @@ async def main() -> None:
         # POST /api/config：写回 .env（与 CLI config set 同一命令层）
         r = client.post("/api/config", json={"key": "DEFAULT_AGENT", "value": "alpha"})
         check(r.json()["ok"] is True, "修改默认智能体写回成功")
+        check(r.json()["hot"] is True, "DEFAULT_AGENT 可热生效，返回 hot=true")
+        check(cfg.default_agent == "alpha", "热生效项同步更新内存 cfg")
         check("DEFAULT_AGENT=alpha" in env.read_text(encoding="utf-8"), "写回内容正确")
         r = client.post("/api/config", json={"key": "NOT_A_KEY", "value": "x"})
         check(r.json()["ok"] is False and r.json()["error"], "未登记键拒绝")

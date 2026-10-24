@@ -331,8 +331,13 @@
         try {
           const res = await setConfig(it.key, next);
           if (res.ok) {
-            cfgPending.set(it.key, next);
-            toast('已保存，重启服务后生效');
+            // 热生效项不进 cfgPending：直接刷新拉取新值，不显示「待重启」角标
+            if (res.hot) {
+              toast('已生效');
+            } else {
+              cfgPending.set(it.key, next);
+              toast('已保存，重启服务后生效');
+            }
           } else {
             alert(res.error || '保存没有成功，请稍后再试');
           }
@@ -388,8 +393,12 @@
           input.focus();
           return;
         }
-        cfgPending.set(it.key, value);
-        toast('已保存，重启服务后生效');
+        if (res.hot) {
+          toast('已生效');
+        } else {
+          cfgPending.set(it.key, value);
+          toast('已保存，重启服务后生效');
+        }
       } catch (_) {
         alert('连接服务失败，请稍后再试');
         input.focus();

@@ -89,24 +89,26 @@ def main() -> None:
         env.write_text("AGENTS=old\n", encoding="utf-8")
         cfg.env_file = env
 
-        err = ConfigOps.set(cfg, "agents", "workbuddy")
+        err, hot = ConfigOps.set(cfg, "agents", "workbuddy")
         check(err is None, "登记键写回成功（键名大小写不敏感）")
+        check(hot is False, "AGENTS 不在热生效清单，需重启")
         check("AGENTS=workbuddy" in env.read_text(encoding="utf-8"),
               "原位替换写回 .env")
 
-        err = ConfigOps.set(cfg, "NOT_A_KEY", "x")
+        err, _ = ConfigOps.set(cfg, "NOT_A_KEY", "x")
         check(err is not None and "不支持" in err, "未登记键拒绝修改")
 
-        err = ConfigOps.set(cfg, "API_KEY", "")
+        err, _ = ConfigOps.set(cfg, "API_KEY", "")
         check(err is not None and "清空" in err, "敏感项空值拒绝（留空=不改）")
 
-        err = ConfigOps.set(cfg, "API_KEY", "sk-new")
+        err, hot = ConfigOps.set(cfg, "API_KEY", "sk-new")
         check(err is None and "API_KEY=sk-new" in env.read_text(encoding="utf-8"),
               "敏感项填新值正常更换")
+        check(hot is True and cfg.sf_api_key == "sk-new", "可热生效项同时更新内存 cfg")
 
         bad = Path(td) / "no-dir" / ".env"
         cfg.env_file = bad
-        err = ConfigOps.set(cfg, "AGENTS", "x")
+        err, _ = ConfigOps.set(cfg, "AGENTS", "x")
         check(err is not None and "失败" in err, "写入失败返回可读错误文案")
 
     print("\n全部通过")

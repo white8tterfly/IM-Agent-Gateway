@@ -8,7 +8,7 @@ POST /api/config）、本地 CLI（manage.py agent on/off、config set）三个�
 from __future__ import annotations
 
 from ..agents.registry import AgentRegistry
-from ..config import Config
+from ..config import Config, apply_hot_config
 from . import persist
 
 
@@ -42,10 +42,13 @@ class ConfigOps:
     """配置写回操作：校验 + 持久化，CLI config set 与 Web 管理端点共用。"""
 
     @staticmethod
-    def set(cfg: Config, key: str, value: str) -> str | None:
-        """把键值写回项目 .env（键名规范化为大写），重启服务后生效。
+    def set(cfg: Config, key: str, value: str) -> tuple[str | None, bool]:
+        """把键值写回项目 .env（键名规范化为大写），并尽量热更新到内存 cfg。
 
-        成功返回 None；失败返回可直接提示给用户的错误文案。
+        返回 (错误文案 or None, 是否已热生效)：
+        - 错误非 None 时表示写盘失败，热生效一定为 False；
+        - 错误为 None 时，hot=True 表示已写入内存 cfg 并立即生效，
+          hot=False 表示仅写盘、需重启服务生效。
         - 只允许修改元数据表登记过的键（有说明的键才给改，防误写）；
         - 敏感项空值拒绝：页面留空表示「不修改」而不是「清空」，
           如确需清空请直接编辑 .env 文件。
@@ -53,11 +56,13 @@ class ConfigOps:
         from .config_meta import CONFIG_META_BY_KEY
         item = CONFIG_META_BY_KEY.get(key.strip().upper())
         if item is None:
-            return f"未知的配置项：{key}（该配置暂不支持在这里修改，请直接编辑 .env 文件）"
+            return f"未知的配置项：{key}（该配置暂不支持在这里修改，请直接编辑 .env 文件）", False
         if item.sensitive and not value.strip():
-            return f"{item.label}是敏感配置，留空表示不修改；如需清空请直接编辑 .env 文件"
+            return f"{item.label}是敏感配置，留空表示不修改；如需清空请直接编辑 .env 文件", False
         try:
             persist.set_env_value(cfg.env_file, item.key, value)
         except OSError as exc:
-            return f"写入 .env 失败：{exc}"
-        return None
+            return f"写入 .env 失败：{exc}", False
+        # 写盘成功后尝试热更新内存 cfg；未登记在 HOT_PARSERS 的项返回 False
+        hot = apply_hot_config(cfg, item.key, value)
+        return None, hot

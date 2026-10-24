@@ -64,9 +64,30 @@ def create_router(service: ManageService) -> APIRouter:
         return service.config_grouped()
 
     @api.post("/api/config")
-    def set_config(body: ConfigBody) -> dict:
-        """修改配置写回 .env：与 CLI config set 同一命令层，重启生效。"""
-        err = ConfigOps.set(service.cfg, body.key, body.value)
-        return {"ok": err is None, "error": err}
+    async def set_config(body: ConfigBody) -> dict:
+        """修改配置写回 .env：与 CLI config set 同一命令层，尽量热生效。
+
+        返回 hot 字段：true 表示已写入内存并立即生效；false 表示仅写盘、
+        需重启服务生效。涉及长连接重建（Jev / SiliconFlow client）或
+        Agent 元数据覆写的，在写盘后异步重建。
+        """
+        err, hot = ConfigOps.set(service.cfg, body.key, body.value)
+        if err is not None:
+            return {"ok": False, "error": err, "hot": False}
+        # 热生效副作用：写盘成功后重建依赖 cfg 构造期参数的资源
+        key = body.key.strip().upper()
+        if key in ("AGENT_KINDS", "AGENT_COMPLEXITY"):
+            service.registry.apply_meta_overrides(
+                service.cfg.agent_kinds, service.cfg.agent_complexity
+            )
+        if key in ("JEV_BASE_URL", "JEV_TIMEOUT_SEC"):
+            await service.router.jev.reconfigure()
+        if key in ("SF_BASE_URL", "SF_TIMEOUT_SEC", "API_KEY"):
+            for agent in service.registry.agents:
+                await agent.apply_config()
+        if key == "LOG_LEVEL":
+            import logging
+            logging.getLogger().setLevel(service.cfg.log_level)
+        return {"ok": True, "error": None, "hot": hot}
 
     return api

@@ -111,9 +111,11 @@ def cmd_config_set(cfg: Config, key: str, value: str) -> str:
     校验口径与 POST /api/config 完全一致：未登记键拒绝修改，
     敏感项留空视为「不修改」而非清空，避免误清凭证。
     """
-    err = ConfigOps.set(cfg, key, value)
+    err, hot = ConfigOps.set(cfg, key, value)
     if err is not None:
         return err
+    if hot:
+        return f"已写入 {key.strip().upper()}={value} 到 {cfg.env_file}（该配置可热生效，运行中的服务会即时采用新值）"
     return f"已写入 {key.strip().upper()}={value} 到 {cfg.env_file}（重启服务后生效）"
 
 

@@ -46,13 +46,28 @@ class JevRouter:
     def __init__(self, cfg: Config, transport=None) -> None:
         """transport 仅供测试注入 MockTransport，正常运行不传。"""
         self.cfg = cfg
-        self._client = httpx.AsyncClient(
-            base_url=cfg.jev_base_url,
+        self._transport = transport
+        self._client = self._build_client()
+
+    def _build_client(self) -> httpx.AsyncClient:
+        """按当前 cfg 构造 httpx 客户端（base_url / timeout 可热更新）。"""
+        return httpx.AsyncClient(
+            base_url=self.cfg.jev_base_url,
             timeout=httpx.Timeout(
-                connect=5.0, read=cfg.jev_timeout_sec, write=10.0, pool=5.0
+                connect=5.0, read=self.cfg.jev_timeout_sec, write=10.0, pool=5.0
             ),
-            transport=transport,
+            transport=self._transport,
         )
+
+    async def reconfigure(self) -> None:
+        """配置热更新：用最新 cfg 重建客户端（base_url / timeout 变化时调用）。"""
+        old = self._client
+        self._client = self._build_client()
+        if old is not None:
+            try:
+                await old.aclose()
+            except Exception:
+                logger.exception("关闭旧 Jev 客户端异常")
 
     @property
     def available(self) -> bool:
