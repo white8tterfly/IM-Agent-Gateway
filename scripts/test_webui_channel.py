@@ -98,6 +98,10 @@ async def main() -> None:
 
         r = client.get("/")
         check(r.status_code == 200 and "IM-Agent Gateway" in r.text, "静态根路径托管")
+        r = client.get("/chat.html")
+        check(r.status_code == 200 and "聊天台" in r.text, "聊天页静态托管")
+        r = client.get("/css/main.css")
+        check(r.status_code == 200 and "--spring" in r.text, "样式资源托管")
 
         # ---------- WS 聊天：归一化上抛 ----------
         received: list[InboundMessage] = []

@@ -3,11 +3,289 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IM-Agent Gateway 控制台</title>
+  <title>管理台 - IM-Agent Gateway 控制台</title>
+  <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-  <!-- 占位页：完整管理台页面由前端提交（提交4）替换 -->
-  <h1>IM-Agent Gateway Web 控制台</h1>
-  <p>控制台页面建设中，服务运行正常。</p>
+
+<header class="topbar">
+  <div class="logo">IM-Agent Gateway 控制台</div>
+  <nav>
+    <a href="index.html" class="current">管理台</a>
+    <a href="chat.html">聊天台</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="state-badge" class="badge hidden">检测中</span>
+</header>
+
+<!-- 睡眠 / 离线遮罩面板 -->
+<div id="overlay" class="overlay hidden">
+  <div class="panel">
+    <h1 id="overlay-title">服务正在休息</h1>
+    <p id="overlay-text">服务暂时没有在运行，你可以把它叫醒。</p>
+    <button id="wake-btn" class="btn big">点击唤醒</button>
+    <p id="overlay-tip" class="hidden" style="margin-top:18px; margin-bottom:0;">正在尝试叫醒服务，请稍等…</p>
+  </div>
+</div>
+
+<main class="main">
+
+  <!-- 运行状态 -->
+  <section class="card">
+    <h2>运行状态</h2>
+    <div id="status-body" class="kv">
+      <span class="k">正在获取…</span>
+    </div>
+  </section>
+
+  <!-- Agent 服务开关 -->
+  <section class="card">
+    <h2>智能体服务 <span id="agent-count" class="count"></span></h2>
+    <div id="agent-list"></div>
+  </section>
+
+  <!-- 任务 -->
+  <section class="card">
+    <h2>任务 <span id="task-count" class="count"></span></h2>
+    <div id="task-list" class="task-list"><div>正在获取…</div></div>
+  </section>
+
+  <!-- 日志 -->
+  <section class="card">
+    <h2>
+      运行日志
+      <span class="spacer" style="flex:1"></span>
+      <button id="log-refresh" class="btn ghost">刷新</button>
+    </h2>
+    <pre id="log-body" class="log-pre">还没有日志内容</pre>
+  </section>
+
+  <!-- 配置 -->
+  <section class="card">
+    <h2>配置</h2>
+    <details>
+      <summary>展开查看当前生效的配置（敏感信息已隐藏）</summary>
+      <div id="config-body" class="kv"></div>
+    </details>
+  </section>
+
+</main>
+
+<script type="module">
+  // 管理台页面逻辑：三态探测（在线 / 睡眠 / 离线）+ 各区块渲染 + 轮询刷新
+  import {
+    detectState, getStatus, getAgents, setAgentActive,
+    getTasks, getLogs, getConfig, wakeService,
+  } from './js/api.js';
+
+  const $ = (sel) => document.querySelector(sel);
+
+  const stateBadge = $('#state-badge');
+  const overlay = $('#overlay');
+  const overlayTitle = $('#overlay-title');
+  const overlayText = $('#overlay-text');
+  const wakeBtn = $('#wake-btn');
+  const overlayTip = $('#overlay-tip');
+
+  // ---------- 三态控制 ----------
+
+  function setBadge(state) {
+    stateBadge.classList.remove('hidden', 'offline', 'sleep');
+    if (state === 'online') {
+      stateBadge.textContent = '运行中';
+    } else if (state === 'sleeping') {
+      stateBadge.textContent = '睡眠中';
+      stateBadge.classList.add('sleep');
+    } else if (state === 'offline') {
+      stateBadge.textContent = '未运行';
+      stateBadge.classList.add('offline');
+    } else {
+      stateBadge.textContent = state; // 提示文案等其他状态
+    }
+  }
+
+  function showSleeping() {
+    setBadge('sleeping');
+    overlayTitle.textContent = '服务正在休息';
+    overlayText.textContent = '服务暂时没有在运行，你可以把它叫醒。';
+    wakeBtn.classList.remove('hidden');
+    overlayTip.classList.add('hidden');
+    overlay.classList.remove('hidden');
+  }
+
+  function showOffline() {
+    setBadge('offline');
+    overlayTitle.textContent = '服务没有启动';
+    overlayText.textContent = '既没有查到运行中的服务，也没有找到值守的看门狗。请先在电脑上启动服务，再刷新本页。';
+    wakeBtn.classList.add('hidden');
+    overlay.classList.remove('hidden');
+  }
+
+  async function handleState() {
+    const state = await detectState();
+    if (state === 'online') {
+      overlay.classList.add('hidden');
+      setBadge('运行中');
+      await refreshAll();
+    } else if (state === 'sleeping') {
+      showSleeping();
+    } else {
+      showOffline();
+    }
+  }
+
+  // 唤醒：点击后打 /api/wake，随后轮询等服务上线（最多 60 秒）
+  wakeBtn.addEventListener('click', async () => {
+    wakeBtn.disabled = true;
+    wakeBtn.textContent = '正在叫醒…';
+    overlayTip.classList.remove('hidden');
+    try {
+      await wakeService();
+    } catch (_) { /* 看门狗可能在服务接管端口瞬间断开，继续轮询即可 */ }
+    const deadline = Date.now() + 60 * 1000;
+    const poll = setInterval(async () => {
+      try {
+        await getStatus();
+        clearInterval(poll);
+        wakeBtn.disabled = false;
+        wakeBtn.textContent = '点击唤醒';
+        await handleState();
+      } catch (_) {
+        if (Date.now() > deadline) {
+          clearInterval(poll);
+          wakeBtn.disabled = false;
+          wakeBtn.textContent = '点击唤醒';
+          overlayText.textContent = '叫醒服务超过了 60 秒还没成功，请到电脑上检查服务进程。';
+        }
+      }
+    }, 1500);
+  });
+
+  // ---------- 区块渲染 ----------
+
+  function fmtIdle(row) {
+    const idle = row.idle;
+    if (!idle || !idle.exit_enabled) {
+      return '';
+    }
+    const remain = Math.max(0, idle.idle_min * 60 - idle.idle_sec);
+    const min = Math.floor(remain / 60);
+    if (min >= 1) {
+      return `<span class="k">休息倒计时</span><span>大约 ${min} 分钟后自动休息</span>`;
+    }
+    return `<span class="k">休息倒计时</span><span>即将自动休息（收到新消息会重新计时）</span>`;
+  }
+
+  async function renderStatus() {
+    const st = await getStatus();
+    const channels = st.channels.map((c) =>
+      `${c.name}（${c.connected ? '已连接' : '未连接'}）`).join('、') || '无';
+    $('#status-body').innerHTML = [
+      '<span class="k">运行状态</span><span>正常运行</span>',
+      `<span class="k">消息通道</span><span>${channels}</span>`,
+      `<span class="k">智能体</span><span>共 ${st.agents.total} 个，已开启 ${st.agents.active} 个</span>`,
+      fmtIdle(st),
+    ].filter(Boolean).join('');
+  }
+
+  async function renderAgents() {
+    const agents = await getAgents();
+    $('#agent-count').textContent = `${agents.filter((a) => a.active).length} / ${agents.length} 已开启`;
+    const host = $('#agent-list');
+    host.innerHTML = '';
+    if (!agents.length) {
+      host.innerHTML = '<div class="agent-row"><div class="desc">还没有接入任何智能体</div></div>';
+      return;
+    }
+    agents.forEach((a) => {
+      const row = document.createElement('div');
+      row.className = 'agent-row';
+      const disabled = a.active && !a.available;
+      row.innerHTML = `
+        <div class="info">
+          <div class="name">${a.label}</div>
+          <div class="desc">${a.routing_hint}</div>
+          ${!a.available ? '<div class="state-note">暂不可用：缺少配置或未安装</div>' : ''}
+        </div>
+        <button class="toggle ${a.active ? 'on' : ''}" ${disabled ? 'disabled' : ''}
+                title="${a.active ? '点击关闭' : '点击开启'}">
+          <span class="knob"></span>
+        </button>`;
+      const toggle = row.querySelector('.toggle');
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          const res = await setAgentActive(a.name, !a.active);
+          if (!res.ok) {
+            alert(res.error || '操作没有成功，请稍后再试');
+          }
+          await renderAgents();
+          await renderStatus();
+        } catch (_) {
+          alert('连接服务失败，请稍后再试');
+          toggle.disabled = false;
+        }
+      });
+      host.appendChild(row);
+    });
+  }
+
+  async function renderTasks() {
+    const data = await getTasks();
+    $('#task-count').textContent = `${data.inflight} 个进行中`;
+    const host = $('#task-list');
+    if (!data.recent.length) {
+      host.innerHTML = '<div>最近没有任务记录</div>';
+      return;
+    }
+    host.innerHTML = data.recent.map((t) => `
+      <div class="task-item">
+        <span class="${t.ok ? 'ok' : 'fail'}">${t.ok ? '完成' : '失败'}</span>
+        <span>${t.label}</span>
+        <span>来源：${t.im}</span>
+        ${t.model ? `<span>模型：${t.model}</span>` : ''}
+        <span>用时：${t.elapsed_sec} 秒</span>
+        ${t.usage ? `<span>${t.usage}</span>` : ''}
+      </div>`).join('');
+  }
+
+  async function renderLogs() {
+    const data = await getLogs(200);
+    $('#log-body').textContent = data.lines.join('\n') || '还没有日志内容';
+  }
+
+  async function renderConfig() {
+    const cfg = await getConfig();
+    $('#config-body').innerHTML = Object.entries(cfg)
+      .map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`)
+      .join('');
+  }
+
+  async function refreshAll() {
+    // 单个区块失败不拖垮整页刷新
+    const jobs = [renderStatus, renderAgents, renderTasks, renderLogs, renderConfig];
+    for (const job of jobs) {
+      try { await job(); } catch (_) { /* 等下一轮轮询重试 */ }
+    }
+  }
+
+  $('#log-refresh').addEventListener('click', () => renderLogs().catch(() => {}));
+
+  // ---------- 启动 ----------
+
+  await handleState();
+  // 在线时每 5 秒轮询一次整体状态（接口不通则重新走三态探测）
+  setInterval(async () => {
+    if (overlay.classList.contains('hidden')) {
+      try {
+        await getStatus();
+        await refreshAll();
+      } catch (_) {
+        await handleState();
+      }
+    }
+  }, 5000);
+</script>
+
 </body>
 </html>
