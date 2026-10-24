@@ -13,6 +13,7 @@ import re
 import shutil
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from ...config import Config
@@ -29,6 +30,18 @@ _WB_SESSION_MISSING_PAT = re.compile(
 )
 # codebuddy 无 --list-models，但 --help 的 --model 参数说明里列出全部模型
 _MODEL_LIST_PAT = re.compile(r"Currently supported:\s*\(([^)]*)\)")
+
+# codebuddy 会话记录存放规则：~/.codebuddy/projects/<工作目录映射名>/<会话ID>.jsonl，
+# 映射名由工作目录推导——去掉盘符冒号、路径分隔符替换为连字符、盘符转小写，
+# 如 E:\wbwork → e-wbwork、C:\Users\xxx → c-Users-xxx。其 -p 非交互模式不会
+# 自建该目录，目录缺失时写会话文件会直接 ENOENT，需在启动前补建。
+
+
+def _codebuddy_project_dir(cwd: str) -> Path:
+    """按 codebuddy 的目录映射规则推导项目会话目录。"""
+    raw = cwd.replace(":", "").replace("\\", "-").replace("/", "-")
+    sanitized = raw[:1].lower() + raw[1:] if raw else raw
+    return Path.home() / ".codebuddy" / "projects" / sanitized
 
 
 @dataclass
@@ -219,14 +232,26 @@ class WorkBuddyAgent(BaseAgent):
         ]
         if resume:
             args += ["--resume", session_id]
+        elif session_id:
+            # 新会话沿用稳定会话 ID（--session-id），后续消息才能 --resume 续接上下文
+            args += ["--session-id", session_id]
         model = model or self.cfg.workbuddy_model
         if model:
             args += ["--model", model]
         return args
 
+    def _ensure_project_dir(self) -> None:
+        """补建 codebuddy 的项目会话目录（-p 模式不自建，缺失会 ENOENT）。"""
+        try:
+            _codebuddy_project_dir(self.cfg.workbuddy_cwd).mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # 补建失败不阻断任务，让 codebuddy 自身报错暴露问题
+            logger.debug("补建 codebuddy 项目会话目录失败", exc_info=True)
+
     async def _run_process(self, chat_key: str, state: _WBState, task: _WBTask) -> WBResult:
         """执行一次 codebuddy；支持 --resume 续接，会话不存在时自动新建。"""
-        # 优先续接已有会话；若会话不存在则新建（新会话的 ID 从输出流中捕获）
+        # 优先续接已有会话；若会话不存在则用同一稳定 ID 新建（--session-id），
+        # 会话记录随任务正常落盘，后续消息仍可 --resume 续接
         result = await self._exec(
             chat_key, self._build_args(task.query, task.model, resume=True, session_id=state.session_id),
             task.on_output,
@@ -235,7 +260,7 @@ class WorkBuddyAgent(BaseAgent):
             return result
         logger.info("会话 %s 不存在，新建会话", state.session_id)
         return await self._exec(
-            chat_key, self._build_args(task.query, task.model, resume=False, session_id=""),
+            chat_key, self._build_args(task.query, task.model, resume=False, session_id=state.session_id),
             task.on_output,
         )
 
@@ -264,6 +289,8 @@ class WorkBuddyAgent(BaseAgent):
         on_output: Callable[[str], object] | None = None,
     ) -> WBResult:
         logger.info("启动 codebuddy: %s", " ".join(args[:3]) + " ...")
+        # codebuddy -p 模式不自建项目会话目录，先补建避免写会话文件 ENOENT
+        self._ensure_project_dir()
         try:
             proc = await asyncio.create_subprocess_exec(
                 *resolve_cli_argv(args),
