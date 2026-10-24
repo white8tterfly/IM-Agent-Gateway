@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 import uuid
 
@@ -13,17 +12,10 @@ from ..agents.registry import AgentRegistry
 from ..config import Config
 from ..gateway.base import IMChannel, InboundEvent, InboundMessage
 from .jev_router import JevRouter
+from .keyword_router import KeywordRouter
 
 logger = logging.getLogger(__name__)
 
-# 编码意图关键词：命中则自动路由到编码类 Agent（kind="coding"），否则交给默认 Agent
-_CODE_INTENT_RE = re.compile(
-    r"代码|编码|编程|修复|修一下|bug|报错|异常|崩溃|编译|运行|实现|函数|方法|接口|"
-    r"脚本|命令|git|commit|push|merge|分支|部署|重构|单元测试|代码审查|依赖|打包|发布|"
-    r"文件|目录|仓库|日志|调试|code|fix|debug|implement|refactor|build|deploy|"
-    r"script|function|compile|error",
-    re.IGNORECASE,
-)
 # 流式消息单条最大展示字符数（企微单条消息约 20480 字节）
 STREAM_CAP = 6000
 # 企微要求流式消息 10 分钟内 finish，8 分钟时轮换新流留余量
@@ -81,6 +73,8 @@ class MessageRouter:
         self.registry = registry
         self.chat_agents: dict[str, str] = {}  # chat_key -> 固定 Agent 名（/agent 切换）
         self.jev = JevRouter(cfg)
+        # 关键字意图路由：Jev 未配置/失败/低置信时的退化方案
+        self.keyword = KeywordRouter()
 
     # ---------- 帮助文本 ----------
 
@@ -259,16 +253,14 @@ class MessageRouter:
         if override in active:
             return active[override]
         if self.cfg.auto_route and query:
-            # Jev 决策路由，低置信度或失败返回 None
+            # 自动路由：Jev 决策优先，未配置/失败/低置信退化到关键字意图解析
             if self.jev.available:
                 name = await self.jev.route(query, list(active.values()))
                 if name in active:
                     return active[name]
-            # 关键词兜底：编码意图 → 编码类 Agent
-            if _CODE_INTENT_RE.search(query):
-                for agent in self.registry.active_agents:
-                    if agent.kind == "coding":
-                        return agent
+            name = self.keyword.route(query, list(active.values()))
+            if name in active:
+                return active[name]
         if self.cfg.default_agent in active:
             return active[self.cfg.default_agent]
         return self.registry.active_agents[0]

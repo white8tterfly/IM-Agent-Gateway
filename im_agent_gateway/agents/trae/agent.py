@@ -162,6 +162,8 @@ class TraeAgent(BaseAgent):
     label = "Trae（编码）"
     kind = "coding"
     routing_hint = "Trae 编码任务：代码生成、修复、重构、执行命令（另一个编码 Agent，可用 /agent trae 指定）"
+    # 意图关键词：编码词表由 kind=coding 默认继承，这里只追加名字直达词
+    routing_keywords = ("trae",)
 
     def __init__(self, cfg=None) -> None:
         super().__init__()
