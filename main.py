@@ -14,6 +14,7 @@ from im_agent_gateway.config import Config, load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
 from im_agent_gateway.gateway.handoff import load as load_handoff
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.manage.service import ManageService
 from im_agent_gateway.plugins import load_agent, load_channel
 from im_agent_gateway.router.dispatcher import MessageRouter
 
@@ -117,6 +118,11 @@ async def amain() -> None:
         gateway.register(channel)
         channel.on_message = router.handle_msg
         channel.on_event = router.handle_event
+
+    # 管理服务：聚合平台状态供 Web 管理端点与 CLI 查询；
+    # 路由层任务结束时上报最近任务（环形缓冲），webui 通道开启时挂载 REST 端点
+    manage = ManageService(cfg, registry, router, gateway=gateway)
+    router.on_task_event = manage.on_task_event
 
     logger.info("服务已启动：%d 个 IM 通道（%s），Agent：%s，工作目录 %s",
                 len(gateway), ", ".join(gateway.channel_names),

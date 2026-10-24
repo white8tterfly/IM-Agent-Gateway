@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 import uuid
+from typing import Callable
 
 from ..agents.base import BaseAgent
 from ..agents.registry import AgentRegistry
@@ -78,9 +79,16 @@ class StreamSender:
 class MessageRouter:
     """消息路由：接收通道回调，分发到 Agent，流式回传结果。"""
 
-    def __init__(self, cfg: Config, registry: AgentRegistry) -> None:
+    def __init__(
+        self,
+        cfg: Config,
+        registry: AgentRegistry,
+        on_task_event: Callable[[dict], object] | None = None,
+    ) -> None:
         self.cfg = cfg
         self.registry = registry
+        # 任务结束事件回调（管理台最近任务展示用）：默认 None 不上报
+        self.on_task_event = on_task_event
         self.chat_agents: dict[str, str] = {}  # chat_key -> 固定 Agent 名（/agent 切换）
         self.jev = JevRouter(cfg)
         # 关键字意图路由：Jev 未配置/失败/低置信时的退化方案
@@ -230,6 +238,7 @@ class MessageRouter:
     async def _run_task(self, chat_key: str, query: str, msg: InboundMessage, agent: BaseAgent) -> None:
         cwd = agent.cwd_for(chat_key)
         model = agent.model_for(chat_key)
+        started_at = time.time()  # 任务事件用（墙上时钟）
 
         if agent.busy(chat_key):
             # 有任务在执行：先给反馈，再排队
@@ -253,6 +262,7 @@ class MessageRouter:
             logger.exception("任务调度异常（%s）", agent.name)
             await sender.feed(f"\n服务异常：{exc}")
             await sender.flush(finish=True)
+            self._emit_task_event(agent, model, msg, chat_key, started_at, ok=False, usage=None)
             return
 
         if not result.ok:
@@ -265,6 +275,29 @@ class MessageRouter:
             summary += f" · {usage}"
         await sender.feed(summary)
         await sender.flush(finish=True)
+        self._emit_task_event(agent, model, msg, chat_key, started_at, ok=result.ok, usage=usage)
+
+    def _emit_task_event(
+        self, agent: BaseAgent, model: str, msg: InboundMessage,
+        chat_key: str, started_at: float, ok: bool, usage: str | None,
+    ) -> None:
+        """任务结束时上报事件（管理台最近任务展示用）；回调异常不影响任务链路。"""
+        if self.on_task_event is None:
+            return
+        try:
+            self.on_task_event({
+                "agent": agent.name,
+                "label": agent.label,
+                "model": model or agent.default_model,
+                "im": msg.im,
+                "chat_key": chat_key,
+                "ok": ok,
+                "usage": usage,
+                "started_at": started_at,
+                "elapsed_sec": round(time.time() - started_at, 3),
+            })
+        except Exception:
+            logger.exception("任务事件上报失败")
 
     # ---------- 工具 ----------
 
@@ -299,6 +332,15 @@ class MessageRouter:
     def is_idle(self, min_seconds: float) -> bool:
         """空闲判定：无任务在执行，且距最近活动达到 min_seconds。"""
         return self._inflight == 0 and (time.monotonic() - self._last_activity) >= min_seconds
+
+    def idle_seconds(self) -> float:
+        """距最近一次活动（消息/任务结束）的秒数（管理台空闲倒计时用）。"""
+        return time.monotonic() - self._last_activity
+
+    @property
+    def inflight(self) -> int:
+        """正在执行中的任务数（管理台展示用）。"""
+        return self._inflight
 
     async def close(self) -> None:
         """释放路由资源。"""
