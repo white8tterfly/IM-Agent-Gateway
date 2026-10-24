@@ -14,8 +14,8 @@ from im_agent_gateway.config import Config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
 from im_agent_gateway.gateway.watch_http import WatchHttpServer
 
-# 真实静态目录（webui 通道自带页面），托管须服务同一份
-STATIC_DIR = Path(__file__).resolve().parent.parent / "im_agent_gateway" / "gateway" / "channels" / "webui" / "static"
+# 真实静态目录（项目根 webui/，与 webui 通道默认目录同一份），托管须服务同一份
+STATIC_DIR = Path(__file__).resolve().parent.parent / "webui"
 
 
 def check(cond: bool, label: str) -> None:

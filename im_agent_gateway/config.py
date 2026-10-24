@@ -94,7 +94,7 @@ class Config:
     webui_host: str = "127.0.0.1"  # HTTP 绑定地址（默认仅本机可达）
     webui_port: int = 8790         # webui / 睡眠态托管共用端口
     webui_user_id: str = "webui"   # 浏览器会话的 user_id（参与 ALLOWED_USERS 白名单校验）
-    webui_static: str = ""         # Web 静态目录；空 = 包内 webui 通道自带的 static/
+    webui_static: str = ""         # Web 静态目录；空 = 项目根 webui/（管理台与聊天台页面）
 
     # ---- 配置文件位置 ----
     # 运行时开关写回目标：只指向项目目录的 .env，绝不指向上一级凭证文件
@@ -106,10 +106,10 @@ class Config:
 
     @property
     def webui_static_resolved(self) -> Path:
-        """Web 静态目录：显式配置优先，默认用包内 webui 通道的 static/。"""
+        """Web 静态目录：显式配置优先，默认用项目根 webui/（页面与通道代码分离，改前端不用进包里翻）。"""
         if self.webui_static:
             return Path(self.webui_static).expanduser()
-        return Path(__file__).resolve().parent / "gateway" / "channels" / "webui" / "static"
+        return PROJECT_ROOT / "webui"
 
     def apply_webui_switch(self) -> None:
         """把 WEBUI_ENABLED 开关收敛到 CHANNELS 声明：开 = 自动并入，关 = 从声明剔除。
