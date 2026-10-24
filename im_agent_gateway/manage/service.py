@@ -29,7 +29,7 @@ DEFAULT_LOG_FILE = PROJECT_ROOT / "logs" / "im_agent_gateway.log"
 
 
 def config_view(cfg: Config) -> dict:
-    """配置脱敏视图：/api/config 端点与 CLI config show 共用同一口径。
+    """配置脱敏视图（旧口径，CLI config show 过渡期使用）。
 
     敏感字段（命中 key/secret/token/pat/password 特征）非空显示 ******，
     空值保持空串；set 排序、Path 转字符串、dict 值转字符串，便于展示。
@@ -49,6 +49,65 @@ def config_view(cfg: Config) -> dict:
             val = {k: str(v) for k, v in val.items()}
         out[f.name] = val
     return out
+
+
+def _format_config_value(field: str, val: object) -> str:
+    """把 Config 字段值转成适合展示与写回 .env 的字符串。
+
+    布尔转 1/0、集合排序转逗号串、映射转「键=值」串
+    （WORKSPACES 沿用历史分号分隔口径），保持与 .env 文件格式一致。
+    """
+    if val is None or val == "":
+        return ""
+    if isinstance(val, bool):
+        return "1" if val else "0"
+    if isinstance(val, set):
+        return ",".join(sorted(val))
+    if isinstance(val, (list, tuple)):
+        return ",".join(str(v) for v in val)
+    if isinstance(val, dict):
+        sep = ";" if field == "workspaces" else ","
+        return sep.join(f"{k}={v}" for k, v in val.items())
+    return str(val)
+
+
+def config_grouped_view(cfg: Config, meta: list | None = None) -> dict:
+    """分组配置视图：/api/config 端点与 CLI config show 共用同一口径。
+
+    按元数据表分成常用 / 高级两组，每项带通俗名称与说明、当前运行值
+    （敏感项非空显示 ******）；漏登记的 Config 字段自动落 unknown 组
+    只读展示（desc 为暂无说明），避免新增配置凭空消失。
+    meta 参数供测试传入截断的登记表验证 unknown 归类。
+    """
+    from .config_meta import CONFIG_META
+    items = CONFIG_META if meta is None else meta
+
+    declared: set[str] = set()
+    common: list[dict] = []
+    advanced: list[dict] = []
+    for it in items:
+        declared.add(it.field)
+        val = getattr(cfg, it.field, None)
+        shown = "******" if (it.sensitive and val) else _format_config_value(it.field, val)
+        row = {
+            "key": it.key, "field": it.field, "label": it.label, "desc": it.desc,
+            "sensitive": it.sensitive, "type": it.type, "value": shown,
+        }
+        (common if not it.advanced else advanced).append(row)
+
+    unknown: list[dict] = []
+    for f in fields(Config):
+        if f.name == "env_file" or f.name in declared:
+            continue
+        val = getattr(cfg, f.name)
+        sensitive = bool(_SENSITIVE_NAME_RE.search(f.name))
+        shown = "******" if (sensitive and val) else _format_config_value(f.name, val)
+        unknown.append({
+            "key": f.name.upper(), "field": f.name, "label": f.name,
+            "desc": "（暂无说明）", "sensitive": sensitive, "type": "text",
+            "value": shown,
+        })
+    return {"common": common, "advanced": advanced, "unknown": unknown}
 
 
 class ManageService:
@@ -130,5 +189,9 @@ class ManageService:
         return text.splitlines()[-lines:]
 
     def config_view(self) -> dict:
-        """当前生效配置（供展示）：敏感字段脱敏，其余原样。"""
+        """当前生效配置（旧口径，供 CLI show 过渡期使用）：敏感字段脱敏，其余原样。"""
         return config_view(self.cfg)
+
+    def config_grouped(self) -> dict:
+        """分组配置视图：常用 / 高级 / 未登记三组，每项带说明与当前值。"""
+        return config_grouped_view(self.cfg)
