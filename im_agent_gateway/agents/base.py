@@ -38,7 +38,10 @@ class BaseAgent(ABC):
     name: ClassVar[str] = ""      # 注册名，如 "qoder" / "siliconflow"
     label: ClassVar[str] = ""     # 展示名，如 "Qoder CN（编码）"
     kind: ClassVar[str] = "chat"  # "coding"=编码意图自动路由命中；"chat"=普通聊天
-    routing_hint: ClassVar[str] = ""  # 决策路由（Jev）的候选描述；空串则按 kind 生成默认描述
+    routing_hint: ClassVar[str] = ""  # 决策路由（Jev）的候选描述；空串则按 kind 生成默认
+    # 意图关键词（关键字路由用）：Jev 未配置/失败/低置信时，按这些词对消息做简单
+    # 命中计分选路。不声明的 coding Agent 默认继承内置编码词表，其余默认为空。
+    routing_keywords: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self) -> None:
         self._models: dict[str, str] = {}  # chat_key -> 会话模型覆盖（/model 切换）
@@ -49,6 +52,22 @@ class BaseAgent(ABC):
     def available(self) -> bool:
         """Agent 自身前置条件（如 API 凭证）；不满足时注册中心拒绝开启。"""
         return True
+
+    @property
+    def route_keywords(self) -> tuple[str, ...]:
+        """关键字路由实际使用的词表（合成规则，子类一般无需覆写）。
+
+        编码类 Agent（kind="coding"）默认继承内置编码词表，其余默认为空；
+        routing_keywords 声明的是追加词，并入默认词表后生效
+        （如编码 Agent 追加名字直达词、办公 Agent 追加办公词）。
+        """
+        try:
+            # 延迟导入：keyword_router 反向依赖本模块，顶部导入会循环
+            from ..router.keyword_router import CODE_KEYWORDS
+            base = CODE_KEYWORDS if self.kind == "coding" else ()
+        except ImportError:
+            base = ()
+        return base + tuple(self.routing_keywords)
 
     @property
     def route_description(self) -> str:

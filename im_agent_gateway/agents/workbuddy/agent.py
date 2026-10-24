@@ -62,6 +62,12 @@ class WorkBuddyAgent(BaseAgent):
     label = "WorkBuddy（办公）"
     kind = "chat"  # 办公任务走普通消息流，用 /agent workbuddy 显式路由
     routing_hint = "办公任务：文档、表格、PPT 等办公文件处理与办公自动化"
+    # 办公意图关键词：Jev 未配置/降级时，命中即自动路由到本 Agent
+    routing_keywords = (
+        "文档", "表格", "幻灯片", "演示文稿", "ppt", "excel", "word", "pdf",
+        "会议纪要", "纪要", "周报", "日报", "月报", "总结报告", "办公",
+        "markdown", "笔记", "待办", "日程", "排期", "写一份", "整理成",
+    )
 
     def __init__(self, config: Config) -> None:
         super().__init__()

@@ -80,6 +80,8 @@ class QoderRunner(BaseAgent):
     label = "Qoder CN（编码）"
     kind = "coding"
     routing_hint = "编码任务：写代码、修复 bug、运行命令、git 操作、仓库文件读写"
+    # 意图关键词：编码词表由 kind=coding 默认继承，这里只追加名字直达词
+    routing_keywords = ("qoder",)
 
     def __init__(self, config: Config) -> None:
         super().__init__()
