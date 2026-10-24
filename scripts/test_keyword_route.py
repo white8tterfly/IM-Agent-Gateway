@@ -85,6 +85,7 @@ async def main() -> None:
     chat = FakeAgent("chat", kind="chat")
     office = FakeAgent("office", kind="chat",
                        keywords=("文档", "表格", "会议纪要"))
+    worker = FakeAgent("worker", kind="office")
     named_coder = FakeAgent("named", kind="coding", keywords=("namedtool",))
     check(len(coder.route_keywords) > 0,
           "coding Agent 未声明时继承默认编码词表")
@@ -92,26 +93,35 @@ async def main() -> None:
           "chat Agent 未声明时为空（不参与关键字路由）")
     check(office.route_keywords == ("文档", "表格", "会议纪要"),
           "chat Agent 声明追加词合成后即全部词表")
+    check(len(worker.route_keywords) > 0 and "文档" in worker.route_keywords,
+          "office Agent 未声明时继承默认办公词表")
     check(any(kw in named_coder.route_keywords for kw in coder.route_keywords)
           and "namedtool" in named_coder.route_keywords,
           "coding Agent 声明追加词后仍保留编码词表（追加合并，非覆盖）")
 
-    # ===== 二、KeywordRouter 计分与裁决 =====
+    # ===== 一·二、route_kind 用途级计分（Jev 不可用时的用途决策退化） =====
     kw = KeywordRouter()
-    agents = [chat, office, coder]
-    check(kw.route("帮我写个会议纪要", agents) == "office",
-          "办公消息命中 workbuddy 类关键词 → office")
-    check(kw.route("这段代码有 bug，修一下", agents) == "coder",
-          "编码消息命中编码词表 → coder")
-    check(kw.route("今天天气怎么样", agents) is None,
-          "无命中返回 None（保守落默认）")
+    check(kw.route_kind("帮我写个会议纪要", ["office", "coding"]) == "office",
+          "用途级：办公消息命中办公词表 → office")
+    check(kw.route_kind("这段代码有 bug，修一下", ["office", "coding"]) == "coding",
+          "用途级：编码消息命中编码词表 → coding")
+    check(kw.route_kind("今天天气怎么样", ["office", "coding"]) is None,
+          "用途级：无命中返回 None（调用方落 DEFAULT_AGENT）")
+    check(kw.route_kind("写个 script 跑一遍", ["office", "coding"]) == "coding",
+          "用途级：英文关键词大小写不敏感命中")
+    check(kw.route_kind("任何消息", ["chat"]) is None,
+          "用途级：chat 无词表永不命中")
+    check(kw.route_kind("整理 PPT 和 Excel 表格", ["chat", "office"]) == "office",
+          "用途级：chat 在列表中也不得分，office 正常命中")
+    # 并列裁决：构造两用途同分的消息，取 kinds 列表中先出现者
+    a = kw.route_kind("写个 python script 处理文档", ["office", "coding"])
+    b = kw.route_kind("写个 python script 处理文档", ["coding", "office"])
+    check(a != b and a in ("office", "coding") and b in ("office", "coding"),
+          "用途级：并列得分时结果跟随 kinds 顺序（非固定偏向）")
+    check(kw.route_kind("", ["office", "coding"]) is None, "用途级：空消息返回 None")
 
-    tie = kw.route("把这段代码整理成文档", agents)
-    check(tie in ("coder", "office"),
-          "多 Agent 命中时返回注册顺序中最先的高分者")
-    check(kw.route("写个 script 跑一遍", agents) == "coder",
-          "英文关键词大小写不敏感命中")
-    check(kw.route("", agents) is None, "空消息返回 None")
+    # ===== 二、KeywordRouter 计分与裁决 =====
+    agents = [chat, office, coder, worker]
 
     # ===== 三、dispatcher 集成：Jev 未配置 → 关键字解析接管 =====
     cfg = load_config()
@@ -125,6 +135,7 @@ async def main() -> None:
     registry.register(chat, active=True)
     registry.register(office, active=True)
     registry.register(coder, active=True)
+    registry.register(worker, active=True)
     router = MessageRouter(cfg, registry)
     check(router.jev.available is False, "未配置 Key 时 Jev 不可用")
 
@@ -135,15 +146,15 @@ async def main() -> None:
         """发一条消息，返回实际路由到的 Agent 名（从 submits 记录推断）。"""
         ch.frames.clear()
         await ch.on_message(ch.make_msg(content))
-        for a in (chat, office, coder):
+        for a in (chat, office, coder, worker):
             if a.submits and a.submits[-1] == content:
                 return a.name
         return ""
 
     check(await routed("帮我修复这个报错") == "coder",
           "未配置 Jev：编码消息经关键字解析到 coder")
-    check(await routed("把这个表格整理一下") == "office",
-          "未配置 Jev：办公消息经关键字解析到 office")
+    check(await routed("把这个表格整理一下") in ("office", "worker"),
+          "未配置 Jev：办公消息经关键字解析到办公用途 Agent")
     check(await routed("晚上吃什么好") == "chat",
           "未配置 Jev：闲聊无命中落默认 chat")
 
