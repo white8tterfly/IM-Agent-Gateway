@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from ..agents.registry import AgentRegistry
 from ..config import Config
-from .commands import AgentOps
+from .commands import AgentOps, ConfigOps
 from .service import ManageService
 
 
@@ -19,6 +19,13 @@ class ActiveBody(BaseModel):
     """Agent 开关请求体。"""
 
     active: bool
+
+
+class ConfigBody(BaseModel):
+    """配置修改请求体。"""
+
+    key: str
+    value: str = ""
 
 
 def create_router(service: ManageService) -> APIRouter:
@@ -53,7 +60,13 @@ def create_router(service: ManageService) -> APIRouter:
 
     @api.get("/api/config")
     def config() -> dict:
-        """当前生效配置（敏感值脱敏）。"""
-        return service.config_view()
+        """配置分组视图：常用 / 高级 / 未登记，每项带说明与当前值（敏感脱敏）。"""
+        return service.config_grouped()
+
+    @api.post("/api/config")
+    def set_config(body: ConfigBody) -> dict:
+        """修改配置写回 .env：与 CLI config set 同一命令层，重启生效。"""
+        err = ConfigOps.set(service.cfg, body.key, body.value)
+        return {"ok": err is None, "error": err}
 
     return api

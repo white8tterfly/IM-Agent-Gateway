@@ -1,8 +1,8 @@
-"""管理命令层：Agent 运行时开关的单一实现。
+"""管理命令层：Agent 开关与配置写回的单一实现。
 
-IM 框架指令（/agent on|off）、Web 管理端点（POST /api/agents/{name}/active）、
-本地 CLI（manage.py agent on/off）三入口都调用 AgentOps，保证行为、文案、
-持久化完全一致。
+IM 框架指令（/agent on|off）、Web 管理端点（POST /api/agents/{name}/active、
+POST /api/config）、本地 CLI（manage.py agent on/off、config set）三个入口
+都调用 AgentOps / ConfigOps，保证行为、文案、持久化完全一致。
 """
 
 from __future__ import annotations
@@ -35,4 +35,29 @@ class AgentOps:
         except OSError as exc:
             # 开关已在内存生效但没写进文件：如实告知，重启后回旧值
             return f"开关已更新，但写回 .env 失败：{exc}"
+        return None
+
+
+class ConfigOps:
+    """配置写回操作：校验 + 持久化，CLI config set 与 Web 管理端点共用。"""
+
+    @staticmethod
+    def set(cfg: Config, key: str, value: str) -> str | None:
+        """把键值写回项目 .env（键名规范化为大写），重启服务后生效。
+
+        成功返回 None；失败返回可直接提示给用户的错误文案。
+        - 只允许修改元数据表登记过的键（有说明的键才给改，防误写）；
+        - 敏感项空值拒绝：页面留空表示「不修改」而不是「清空」，
+          如确需清空请直接编辑 .env 文件。
+        """
+        from .config_meta import CONFIG_META_BY_KEY
+        item = CONFIG_META_BY_KEY.get(key.strip().upper())
+        if item is None:
+            return f"未知的配置项：{key}（该配置暂不支持在这里修改，请直接编辑 .env 文件）"
+        if item.sensitive and not value.strip():
+            return f"{item.label}是敏感配置，留空表示不修改；如需清空请直接编辑 .env 文件"
+        try:
+            persist.set_env_value(cfg.env_file, item.key, value)
+        except OSError as exc:
+            return f"写入 .env 失败：{exc}"
         return None

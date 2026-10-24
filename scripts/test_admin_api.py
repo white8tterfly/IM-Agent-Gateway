@@ -171,14 +171,33 @@ async def main() -> None:
         r = client.get("/api/logs?lines=2")
         check(r.json()["lines"] == ["line2", "line3"], "logs 返回尾部 N 行")
 
-        # GET /api/config：key/secret/token/PAT 类值脱敏
+        # GET /api/config：分组结构（常用/高级/未登记）+ 每项带说明 + 敏感脱敏
         view = client.get("/api/config").json()
-        check(view["sf_api_key"] == "******", "sf_api_key 脱敏")
-        check(view["feishu_app_secret"] == "******", "feishu_app_secret 脱敏")
-        check(view["qodercn_pat"] == "******", "PAT 凭证脱敏")
-        check(view["secret"] == "", "空凭证保持空串（不误显示为已配置）")
-        check(view["bot_id"] == "bot-123", "非敏感 ID 明文展示")
-        check(view["channels"] == ["wecom"] and "idle_exit_min" in view, "常规配置正常展示")
+        check(set(view) == {"common", "advanced", "unknown"}, "config 返回三组结构")
+        common = {it["key"]: it for it in view["common"]}
+        advanced = {it["key"]: it for it in view["advanced"]}
+        check("AGENTS" in common and common["AGENTS"]["desc"], "常用组含 AGENTS 且带说明")
+        check("JEV_BASE_URL" in advanced, "高级组含 JEV_BASE_URL")
+        check(advanced["API_KEY"]["value"] == "******", "SiliconFlow 密钥脱敏（登记键为 API_KEY）")
+        check(advanced["FEISHU_APP_SECRET"]["value"] == "******", "feishu_app_secret 脱敏")
+        check(advanced["QODERCN_PERSONAL_ACCESS_TOKEN"]["value"] == "******", "PAT 凭证脱敏")
+        check(advanced["SECRET"]["value"] == "", "空凭证保持空串（不误显示为已配置）")
+        check(advanced["BOT_ID"]["value"] == "bot-123", "非敏感 ID 明文展示")
+        check(advanced["SF_MAX_TOKENS"]["value"] == "4096", "max_tokens 明文（纠正正则误伤）")
+        check(advanced["CHANNELS"]["value"] == "wecom", "列表值转逗号串")
+        check(view["unknown"] == [], "全部字段已登记时 unknown 为空")
+
+        # POST /api/config：写回 .env（与 CLI config set 同一命令层）
+        r = client.post("/api/config", json={"key": "DEFAULT_AGENT", "value": "alpha"})
+        check(r.json()["ok"] is True, "修改默认智能体写回成功")
+        check("DEFAULT_AGENT=alpha" in env.read_text(encoding="utf-8"), "写回内容正确")
+        r = client.post("/api/config", json={"key": "NOT_A_KEY", "value": "x"})
+        check(r.json()["ok"] is False and r.json()["error"], "未登记键拒绝")
+        r = client.post("/api/config", json={"key": "API_KEY", "value": ""})
+        check(r.json()["ok"] is False, "敏感项空值拒绝（留空=不改）")
+        r = client.post("/api/config", json={"key": "api_key", "value": "sk-2"})
+        check(r.json()["ok"] is True and "API_KEY=sk-2" in env.read_text(encoding="utf-8"),
+              "键名大小写不敏感，敏感项填新值正常更换")
 
         # 日志文件缺失 → 空列表
         svc2 = ManageService(cfg, registry, router, log_file=Path(td) / "none.log")
