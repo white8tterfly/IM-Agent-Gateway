@@ -35,6 +35,8 @@ IM-Agent Gateway 桥接服务（Python asyncio，本机运行）
 | 用量统计 | 任务结束自动附上执行的 Agent、模型与用量（token / 费用），有数据才展示 |
 | 白名单安全 | 支持按用户 ID 限制可使用范围；编码 Agent 编辑自动接受需显式配置 |
 | 消息唤醒 | 可选：开机只跑轻量看门狗监听 IM，收到消息再唤醒完整服务，空闲自动退回（睡-醒闭环），对 IM 通道一致 |
+| Web 控制台 | 可选：内嵌管理台（状态 / Agent 开关 / 任务 / 日志 / 配置）与聊天台（浏览器直连 Agent，走完整路由），与 IM 消息同一套机制 |
+| 多入口管理 | Agent 开关与配置在 IM 指令、Web 管理台、本地 CLI（`manage.py`）三处操作同一管理命令层，行为一致且写回 `.env` |
 
 ## 快速开始
 
@@ -104,6 +106,36 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 ```
 
 相关配置见 [`.env.example`](./.env.example) 的「消息唤醒 / 看门狗」段。注意：`WATCH_ENABLED=1` 时应由看门狗常驻监听，不要再手动长期运行 `main.py`，二者会抢同一机器人的长连接。
+
+## Web 控制台（可选）
+
+默认关闭，开启后浏览器即可作为第三个 IM 使用，与机器人消息走同一套路由、白名单与队列机制。相关配置见 [`.env.example`](./.env.example) 的「Web 控制台」段。
+
+| 开关 | 默认 | 说明 |
+| --- | --- | --- |
+| `WEBUI_ENABLED` | `0` | `1` = 接入 webui 通道（自动并入 `CHANNELS`），提供管理台与聊天台 |
+| `WATCH_HTTP_ENABLED` | `0` | `1` = 服务睡眠期间由看门狗占住同一端口托管页面，显示「服务正在休息」并提供一键唤醒按钮（需 `WATCH_ENABLED=1`） |
+
+开启 `WEBUI_ENABLED=1` 后，在本机浏览器访问：
+
+| 页面 | 地址 | 用途 |
+| --- | --- | --- |
+| 管理台 | `http://127.0.0.1:8790` | 运行状态、通道连接、空闲倒计时、Agent 开关、进行中与最近任务、日志尾部、脱敏配置 |
+| 聊天台 | `http://127.0.0.1:8790/chat.html` | 浏览器直连 Agent：自动路由、指令、会话记忆、任务排队、流式回复与 IM 消息完全一致 |
+
+端口（`WEBUI_PORT`）由 webui 通道与睡眠态托管共用：服务运行时由服务占用，服务睡眠时（开启 `WATCH_HTTP_ENABLED=1`）由看门狗轻量页面接管，唤醒按钮按下后先停托管再拉起服务，端口交接无冲突。HTTP 仅绑定 `127.0.0.1`（本机访问）；聊天台身份为 `WEBUI_USER_ID`（默认 `webui`），若设置了 `ALLOWED_USERS` 白名单须包含它。
+
+## 多入口管理（CLI）
+
+`manage.py` 与 IM 指令、Web 管理台操作同一管理命令层：Agent 开关在三处行为一致且写回 `.env`，重启后保持。
+
+| 命令 | 依赖服务 | 说明 |
+| --- | --- | --- |
+| `python manage.py config show` | 否 | 展示当前生效配置（敏感值已隐藏） |
+| `python manage.py config check` | 否 | 检查通道必填项、白名单与 Agent 前置条件，给出可读建议 |
+| `python manage.py config set KEY VALUE` | 否 | 修改配置并写回项目 `.env`（重启生效） |
+| `python manage.py status` / `agents` | 是 | 服务状态与 Agent 列表（打管理端点；不可达时提示服务睡眠中或未启动） |
+| `python manage.py agent on\|off <名称>` | 是 | 开关 Agent，与 `/agent on\|off`、Web 管理台行为一致 |
 
 ## 平台接入契约
 
@@ -181,16 +213,24 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 ```
 main.py              服务入口（按 .env 声明组装网关/路由/Agent，接入新 IM/Agent 无需改这里）
 watcher.py           看门狗入口（消息唤醒：只监听 IM，收到消息拉起服务，见「消息唤醒」节）
+manage.py            管理 CLI 入口（config show/check/set 离线可用；status/agents/agent on|off 在线，见「多入口管理」节）
 im_agent_gateway/
   config.py          配置加载（分层 .env；CHANNELS/AGENTS 接入声明）
   plugins.py         插件加载：把 CHANNELS/AGENTS 声明解析成通道与 Agent 实例（短名 / 模块路径两种写法）
+  manage/            管理命令层（IM 指令 / Web 管理台 / CLI 三入口共用）
+    commands.py      AgentOps：Agent 开关 + .env 写回（返回错误文案或 None）
+    persist.py       .env 持久化写回：原位替换保注释、缺键追加、原子落盘
+    api.py           管理端点（FastAPI 路由：status/agents/tasks/logs/config）
+    service.py       ManageService：状态聚合 + 最近任务环形缓冲 + 配置脱敏视图
   gateway/           网关层：多 IM 通道接入（平台核心）
     base.py          IMChannel 抽象基类 + 归一化消息模型（InboundMessage/InboundEvent）
     registry.py      Gateway 注册中心（register / run / close）
     handoff.py       消息交棒：看门狗与服务间的唤醒消息序列化传递（dump/load）
+    watch_http.py    睡眠态 HTTP 托管：看门狗占住 webui 端口提供页面与唤醒按钮
     channels/        各 IM 通道目录（每个 IM 一个子目录，暴露 Channel 类即可接入）
       wecom/         示例通道：企业微信智能机器人（长连接，纯协议层 + 报文归一化）
       feishu/        示例通道：飞书企业自建应用（lark-oapi 长连接，归一化 + 流式回复）
+      webui/         示例通道：本机 Web 控制台（HTTP + WebSocket，管理台与聊天台页面，见「Web 控制台」节）
   router/            路由层：归一化消息分发（IM 无关）
     dispatcher.py    消息路由：框架命令（/agent、/help、/status）、白名单、Agent 分发与指令转发、流式回复、空闲判定
     jev_router.py    决策路由：调用决策模型网关，失败/低置信度自动降级
@@ -216,6 +256,12 @@ scripts/
   test_jev_route.py      决策路由连通性测试
   test_keyword_route.py    关键字意图路由测试：Jev 未配置/失败时的退化选路（无网络依赖）
   test_list_cmds.py      Agent 指令列表测试
+  test_env_persist.py    .env 写回测试：保注释 / 缺键追加 / 原子替换（无网络依赖）
+  test_manage_commands.py 管理命令层测试：开关三入口一致性 + 写回联动（无网络依赖）
+  test_admin_api.py       管理端点测试：状态 / 开关 / 任务事件 / 日志 / 配置脱敏（无网络依赖）
+  test_webui_channel.py   webui 通道测试：WS 聊天归一化 / 流式推送 / 静态托管（无网络依赖）
+  test_watcher_http.py   睡眠态托管测试：状态接口 / 唤醒按钮 / 通道跳过（无网络依赖）
+  test_cli.py             管理 CLI 测试：离线命令 + 在线命令（MockTransport，无网络依赖）
   其余 test_*.py         各示例实现（通道/Agent）的连通性测试
 ```
 
@@ -241,6 +287,7 @@ scripts/
 - **回复乱码/超时**：检查 `logs/im_agent_gateway.log`；任务超时调大对应 Agent 的超时配置。
 - **聊天走不通**：确认上一级目录 `.env` 的 API Key 有效（各示例实现带连通性测试脚本可验证）。
 - **某 Agent 报不可用**：该 Agent 前置条件未满足（未安装 CLI / 未登录 / 未配凭证）；满足后发 `/agent on <名称>` 开启。
+- **Web 控制台页面打不开**：确认 `.env` 里 `WEBUI_ENABLED = "1"`、服务已启动（`python main.py`）、端口 `WEBUI_PORT`（默认 8790）未被占用；若希望服务睡眠期间页面也能打开并提供唤醒按钮，需同时设置 `WATCH_ENABLED = "1"`、`WATCH_HTTP_ENABLED = "1"` 并由 `watcher.py` 常驻。
 
 ## 开源协议
 
