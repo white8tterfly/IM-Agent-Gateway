@@ -43,6 +43,11 @@ class IMChannel(ABC):
 
     name: ClassVar[str] = ""
 
+    # 能力声明：看门狗是否可通过独立监听该通道触发服务唤醒。
+    # 主动长连接型通道（IM SDK）保持默认 True；HTTP 被动型通道（如 webui，
+    # 由服务自身承载 HTTP）覆写为 False——看门狗按此声明筛选，不按通道名分支。
+    wake_listen: ClassVar[bool] = True
+
     def __init__(self) -> None:
         self.on_message: Callable[[InboundMessage], Awaitable[None]] | None = None
         self.on_event: Callable[[InboundEvent], Awaitable[None]] | None = None

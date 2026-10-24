@@ -14,6 +14,7 @@ from im_agent_gateway.config import Config, load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
 from im_agent_gateway.gateway.handoff import load as load_handoff
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.manage.api import create_router
 from im_agent_gateway.manage.service import ManageService
 from im_agent_gateway.plugins import load_agent, load_channel
 from im_agent_gateway.router.dispatcher import MessageRouter
@@ -123,6 +124,14 @@ async def amain() -> None:
     # 路由层任务结束时上报最近任务（环形缓冲），webui 通道开启时挂载 REST 端点
     manage = ManageService(cfg, registry, router, gateway=gateway)
     router.on_task_event = manage.on_task_event
+
+    # 管理端点注入：通道自声明 mount_admin 能力即挂载（可选契约，webui 实现；
+    # 未实现该方法的通道不受影响，与 send_push 的可选覆写模式一致）
+    admin_router = create_router(manage)
+    for ch_name in gateway.channel_names:
+        mount = getattr(gateway.get(ch_name), "mount_admin", None)
+        if callable(mount):
+            mount(admin_router)
 
     logger.info("服务已启动：%d 个 IM 通道（%s），Agent：%s，工作目录 %s",
                 len(gateway), ", ".join(gateway.channel_names),
