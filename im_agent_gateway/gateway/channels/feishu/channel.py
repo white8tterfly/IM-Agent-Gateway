@@ -27,6 +27,49 @@ logger = logging.getLogger(__name__)
 _AT_PREFIX_RE = re.compile(r"^(\s*@[^\s@，,]{1,64})+")
 
 
+def _reset_lark_ws_loop() -> None:
+    """清理 lark-oapi 模块级 ws 事件循环，防止旧连接的自动重连协程复活。
+
+    lark-oapi 的 WS 客户端全部跑在 lark_oapi.ws.client 模块级全局 loop 上，
+    且客户端没有公开的 stop 方法：断开连接后 auto_reconnect 重连协程仍挂
+    在旧 loop 上。同一进程内若再次建立飞书连接（看门狗睡-醒循环就是这种
+    场景），run_until_complete 会把旧 loop 一并跑起来，旧协程随即重连成一
+    条挂着旧回调的僵尸长连接，与新连接抢飞书下发的消息。因此每次关闭通道
+    时：先在旧 loop 上把残留任务全部取消并关闭该 loop，再给模块换上全新
+    loop，旧协程从此没有运行环境，彻底废弃。
+    """
+    try:
+        from lark_oapi.ws import client as ws_module
+
+        old = getattr(ws_module, "loop", None)
+        if old is None:
+            return
+        if not old.is_running() and not old.is_closed():
+            # 此刻旧 loop 已被 SDK disconnect 停下（没有别的线程在跑），
+            # 当前线程可以安全接手跑一小会儿，把残留任务取消干净
+
+            async def _drain() -> None:
+                # 取消全部残留任务（自动重连、心跳、缓存清理等），排除自身
+                for t in asyncio.all_tasks(old):
+                    if t is not asyncio.current_task():
+                        t.cancel()
+                # 留一点运行时间，让被取消的任务走完取消流程
+                await asyncio.sleep(0.1)
+
+            try:
+                old.run_until_complete(_drain())
+            except Exception:
+                logger.debug("清理飞书 SDK 残留任务异常（忽略）", exc_info=True)
+            try:
+                old.close()
+            except Exception:
+                logger.debug("关闭飞书 SDK 旧事件循环异常（忽略）", exc_info=True)
+        # 换上全新 loop：后续同进程再建连接时绑定新 loop，旧任务无处复活
+        ws_module.loop = asyncio.new_event_loop()
+    except Exception:
+        logger.exception("重置飞书 SDK 事件循环失败")
+
+
 class FeishuChannel(IMChannel):
     """飞书通道（企业自建应用，长连接接收事件模式）。"""
 
@@ -50,14 +93,17 @@ class FeishuChannel(IMChannel):
     async def start(self) -> None:
         # 记录主 loop，供后台线程把消息投递回来
         self._main_loop = asyncio.get_running_loop()
-        # 阻塞式连接：SDK 在后台 loop 维持长连接，connect() 直到 disconnect 才返回，
+        logger.info("正在建立飞书长连接（App %s）", self._app_id_masked())
+        # 阻塞式连接：SDK 在后台 loop 维持长连接，connect() 直到连接断开才返回，
         # 这样才能让 gateway.run 的 FIRST_COMPLETED 保持长期运行（与企微 run_forever 一致）。
         await self._sdk.connect()
-        logger.info("飞书长连接已建立（App %s）", self._app_id_masked())
+        logger.info("飞书长连接已断开（App %s）", self._app_id_masked())
 
     async def close(self) -> None:
-        # 优雅关闭：停止后台 loop 与 WS 连接
+        # 优雅关闭：停止后台 loop 与 WS 连接，并废弃 SDK 残留在模块级
+        # ws loop 上的自动重连协程（详见 _reset_lark_ws_loop 注释）
         await self._sdk.disconnect()
+        _reset_lark_ws_loop()
 
     def _app_id_masked(self) -> str:
         # 日志里不完整暴露凭证，仅展示前缀便于排查

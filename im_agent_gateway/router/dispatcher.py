@@ -24,10 +24,11 @@ STREAM_MAX_AGE_SEC = 8 * 60
 class StreamSender:
     """流式消息推送：按节流节奏推送，10 分钟窗口快到时自动轮换新流。"""
 
-    def __init__(self, channel: IMChannel, msg: InboundMessage, interval: float) -> None:
+    def __init__(self, channel: IMChannel, msg: InboundMessage, interval: float, replay: bool = False) -> None:
         self.channel = channel
         self.msg = msg
         self.interval = interval
+        self.replay = replay
         self.stream_id = uuid.uuid4().hex
         self.buf = ""
         self.started_at = time.monotonic()
@@ -40,6 +41,9 @@ class StreamSender:
         if self.closed:
             return
         self.buf += text
+        if self.replay:
+            # 唤醒交棒后的结果：不流式推进，攒到最后一次 flush 整条回传
+            return
         now = time.monotonic()
         if not self.sent_once or now - self.last_flush >= self.interval:
             await self.flush()
@@ -49,8 +53,13 @@ class StreamSender:
             return
         content = self.buf[-STREAM_CAP:]
         if finish:
-            await self.channel.send_stream(self.msg, self.stream_id, content or "（无内容）", finish=True)
+            if self.replay:
+                await self.channel.send_push(self.msg, content or "（无内容）")
+            else:
+                await self.channel.send_stream(self.msg, self.stream_id, content or "（无内容）", finish=True)
             self.closed = True
+            return
+        if self.replay:
             return
         # 快满 10 分钟窗口：结束旧流、开新流继续
         if time.monotonic() - self.started_at > STREAM_MAX_AGE_SEC:
@@ -75,6 +84,8 @@ class MessageRouter:
         self.jev = JevRouter(cfg)
         # 关键字意图路由：Jev 未配置/失败/低置信时的退化方案
         self.keyword = KeywordRouter()
+        self._last_activity = time.monotonic()  # 最近一次消息/任务结束时刻（空闲判定）
+        self._inflight = 0                      # 正在执行的任务数
 
     # ---------- 帮助文本 ----------
 
@@ -102,6 +113,7 @@ class MessageRouter:
     # ---------- 通道回调 ----------
 
     async def handle_msg(self, msg: InboundMessage) -> None:
+        self._last_activity = time.monotonic()
         if not self._allowed(msg.user_id):
             logger.info("拒绝非白名单用户 %s", msg.user_id)
             return
@@ -127,6 +139,7 @@ class MessageRouter:
             await self._start_task(chat_key, msg.content, msg, agent)
 
     async def handle_event(self, evt: InboundEvent) -> None:
+        self._last_activity = time.monotonic()
         if evt.event_type == "enter_chat":
             # 企微要求 5 秒内回复欢迎语（由通道 send_welcome 保证协议正确性）
             await evt.channel.send_welcome(evt, self._help_text())
@@ -204,16 +217,25 @@ class MessageRouter:
     # ---------- 任务执行 ----------
 
     async def _start_task(self, chat_key: str, query: str, msg: InboundMessage, agent: BaseAgent) -> None:
+        self._inflight += 1
+        try:
+            await self._run_task(chat_key, query, msg, agent)
+        finally:
+            self._inflight -= 1
+            # 任务结束即视为一次活动，空闲计时从此刻重新起算
+            self._last_activity = time.monotonic()
+
+    async def _run_task(self, chat_key: str, query: str, msg: InboundMessage, agent: BaseAgent) -> None:
         cwd = agent.cwd_for(chat_key)
         model = agent.model_for(chat_key)
 
         if agent.busy(chat_key):
             # 有任务在执行：先给反馈，再排队
-            queued = StreamSender(msg.channel, msg, self.cfg.stream_interval_sec)
+            queued = StreamSender(msg.channel, msg, self.cfg.stream_interval_sec, replay=msg.replay)
             await queued.feed("上一条任务正在执行，本条消息已排队")
             await queued.flush(finish=True)
 
-        sender = StreamSender(msg.channel, msg, self.cfg.stream_interval_sec)
+        sender = StreamSender(msg.channel, msg, self.cfg.stream_interval_sec, replay=msg.replay)
         await sender.feed(agent.start_hint(cwd=cwd, model=model))
         try:
             future = await agent.submit(
@@ -271,6 +293,10 @@ class MessageRouter:
 
     def _allowed(self, userid: str) -> bool:
         return not self.cfg.allowed_users or userid in self.cfg.allowed_users
+
+    def is_idle(self, min_seconds: float) -> bool:
+        """空闲判定：无任务在执行，且距最近活动达到 min_seconds。"""
+        return self._inflight == 0 and (time.monotonic() - self._last_activity) >= min_seconds
 
     async def close(self) -> None:
         """释放路由资源。"""

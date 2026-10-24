@@ -6,10 +6,13 @@ import asyncio
 import logging
 import shutil
 import sys
+import time
 from pathlib import Path
 
 from im_agent_gateway.agents.registry import AgentRegistry
-from im_agent_gateway.config import load_config
+from im_agent_gateway.config import Config, load_config
+from im_agent_gateway.gateway.base import IMChannel, InboundMessage
+from im_agent_gateway.gateway.handoff import load as load_handoff
 from im_agent_gateway.gateway.registry import Gateway
 from im_agent_gateway.plugins import load_agent, load_channel
 from im_agent_gateway.router.dispatcher import MessageRouter
@@ -51,6 +54,47 @@ def check_prereqs(cfg) -> None:
         logger.warning("工作目录不存在: %s（可用 /cd 切换）", cfg.qoder_cwd_resolved)
 
 
+async def replay_pending(router: MessageRouter, gateway: Gateway, cfg: Config) -> None:
+    """重放看门狗交接的唤醒消息：重建 InboundMessage 并交给路由处理。"""
+    raw = load_handoff(cfg.wake_handoff_file_resolved)
+    if raw is None:
+        return
+    logger = logging.getLogger("main")
+    channel = gateway.get(raw.get("im", ""))
+    if channel is None:
+        logger.warning("交接消息的通道 %s 未注册，忽略唤醒消息", raw.get("im"))
+        return
+    msg = InboundMessage(
+        channel=channel,
+        im=raw.get("im", ""),
+        msg_id=raw.get("msg_id", ""),
+        user_id=raw.get("user_id", ""),
+        chat_id=raw.get("chat_id", ""),
+        chat_type=raw.get("chat_type", "single"),
+        msg_type=raw.get("msg_type", "text"),
+        content=raw.get("content", ""),
+        reply_token=raw.get("reply_token", ""),
+        replay=True,
+    )
+    # 等服务长连接就绪（有限等待），避免结果回传时尚未连上
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and not channel.connected:
+        await asyncio.sleep(0.5)
+    logger.info("重放唤醒消息 im=%s chat=%s", msg.im, msg.chat_id)
+    await router.handle_msg(msg)
+
+
+async def idle_monitor(router: MessageRouter, gateway: Gateway, cfg: Config) -> None:
+    """空闲自动退：空闲超阈值且无任务时关闭网关，触发服务退出。"""
+    logger = logging.getLogger("main")
+    while True:
+        await asyncio.sleep(10)
+        if router.is_idle(cfg.idle_exit_min * 60):
+            logger.info("空闲超过 %.0f 分钟，服务自动退出", cfg.idle_exit_min)
+            await gateway.close()
+            return
+
+
 # ---------- 启动流程 ----------
 
 async def amain() -> None:
@@ -80,7 +124,20 @@ async def amain() -> None:
                 cfg.qoder_cwd_resolved)
 
     try:
-        await gateway.run()
+        run_task = asyncio.create_task(gateway.run())
+        # 看门狗唤醒交接：等服务建立长连接后重放待处理消息
+        await replay_pending(router, gateway, cfg)
+        if cfg.idle_exit:
+            idle_task = asyncio.create_task(idle_monitor(router, gateway, cfg))
+            done, pending = await asyncio.wait(
+                {run_task, idle_task}, return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            for task in done:
+                task.result()  # 抛出异常（如有）
+        else:
+            await run_task
     except KeyboardInterrupt:
         logger.info("收到退出信号")
     finally:
