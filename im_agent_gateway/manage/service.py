@@ -28,6 +28,29 @@ _SENSITIVE_NAME_RE = re.compile(r"key|secret|token|pat|password", re.IGNORECASE)
 DEFAULT_LOG_FILE = PROJECT_ROOT / "logs" / "im_agent_gateway.log"
 
 
+def config_view(cfg: Config) -> dict:
+    """配置脱敏视图：/api/config 端点与 CLI config show 共用同一口径。
+
+    敏感字段（命中 key/secret/token/pat/password 特征）非空显示 ******，
+    空值保持空串；set 排序、Path 转字符串、dict 值转字符串，便于展示。
+    """
+    out: dict = {}
+    for f in fields(Config):
+        val = getattr(cfg, f.name)
+        if _SENSITIVE_NAME_RE.search(f.name):
+            # 非空一律显示 ******（不区分长度，避免泄漏任何字符）
+            out[f.name] = "******" if val else ""
+            continue
+        if isinstance(val, set):
+            val = sorted(val)
+        elif isinstance(val, Path):
+            val = str(val)
+        elif isinstance(val, dict):
+            val = {k: str(v) for k, v in val.items()}
+        out[f.name] = val
+    return out
+
+
 class ManageService:
     """平台状态聚合：状态 / Agent / 任务 / 日志 / 配置（脱敏）。"""
 
@@ -108,18 +131,4 @@ class ManageService:
 
     def config_view(self) -> dict:
         """当前生效配置（供展示）：敏感字段脱敏，其余原样。"""
-        out: dict = {}
-        for f in fields(Config):
-            val = getattr(self.cfg, f.name)
-            if _SENSITIVE_NAME_RE.search(f.name):
-                # 非空一律显示 ******（不区分长度，避免泄漏任何字符）
-                out[f.name] = "******" if val else ""
-                continue
-            if isinstance(val, set):
-                val = sorted(val)
-            elif isinstance(val, Path):
-                val = str(val)
-            elif isinstance(val, dict):
-                val = {k: str(v) for k, v in val.items()}
-            out[f.name] = val
-        return out
+        return config_view(self.cfg)
