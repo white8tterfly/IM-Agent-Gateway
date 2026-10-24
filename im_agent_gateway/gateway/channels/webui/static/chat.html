@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>聊天台 - IM-Agent Gateway 控制台</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">IM-Agent Gateway 控制台</div>
+  <nav>
+    <a href="index.html">管理台</a>
+    <a href="chat.html" class="current">聊天台</a>
+  </nav>
+  <div class="spacer"></div>
+  <span id="state-badge" class="badge offline">未连接</span>
+</header>
+
+<div class="chat-layout">
+  <main id="chat-main" class="chat-main">
+    <div class="bubble sys">正在连接服务…</div>
+  </main>
+
+  <div class="chat-input">
+    <textarea id="chat-text" rows="1"
+              placeholder="输入消息，回车发送；Shift + 回车换行"></textarea>
+    <button id="send-btn" class="btn send-btn">发送</button>
+  </div>
+</div>
+
+<script type="module">
+  // 聊天台页面逻辑：WebSocket 帧渲染（流式气泡 / 文本气泡）+ 发送交互
+  import { createChatSocket } from './js/ws.js';
+
+  const $ = (sel) => document.querySelector(sel);
+  const chatMain = $('#chat-main');
+  const textInput = $('#chat-text');
+  const sendBtn = $('#send-btn');
+  const stateBadge = $('#state-badge');
+
+  // ---------- 气泡渲染 ----------
+
+  function addBubble(kind, text = '') {
+    const el = document.createElement('div');
+    el.className = `bubble ${kind}`;
+    el.textContent = text;
+    chatMain.appendChild(el);
+    chatMain.scrollTop = chatMain.scrollHeight;
+    return el;
+  }
+
+  // ---------- 流式帧聚合：同一 stream id 的帧刷新同一个气泡 ----------
+
+  let streamBubbles = new Map();   // stream_id -> 气泡元素
+  let noReplyTimer = null;         // 发出后无任何回帧的提醒定时器
+
+  function onFrame(frame) {
+    if (noReplyTimer) {
+      clearTimeout(noReplyTimer);
+      noReplyTimer = null;
+    }
+    if (frame.type === 'text') {
+      addBubble('bot', frame.content);
+      return;
+    }
+    if (frame.type === 'stream') {
+      let el = streamBubbles.get(frame.id);
+      if (!el) {
+        el = addBubble('bot', '');
+        el.classList.add('streaming');
+        streamBubbles.set(frame.id, el);
+      }
+      el.textContent = frame.content;
+      if (frame.finish) {
+        el.classList.remove('streaming');  // 定格为普通回复样式
+        streamBubbles.delete(frame.id);
+      }
+      chatMain.scrollTop = chatMain.scrollHeight;
+    }
+  }
+
+  // ---------- 发送 ----------
+
+  function pendingHint() {
+    // 发出消息后 5 秒内没有任何回帧：给出通俗提示（多半是白名单未放行）
+    noReplyTimer = setTimeout(() => {
+      addBubble('sys', '服务 5 秒内没有回应。如果一直如此，请在管理台检查「允许名单」配置里是否包含 webui。');
+    }, 5000);
+  }
+
+  function send() {
+    const content = textInput.value.trim();
+    if (!content) {
+      return;
+    }
+    addBubble('user', content);
+    textInput.value = '';
+    textInput.style.height = 'auto';
+    socket.send({ type: 'text', content });
+    pendingHint();
+  }
+
+  sendBtn.addEventListener('click', send);
+  textInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+  // 输入框随内容自动增高（上限 140px，超出后内部滚动）
+  textInput.addEventListener('input', () => {
+    textInput.style.height = 'auto';
+    textInput.style.height = Math.min(textInput.scrollHeight, 140) + 'px';
+  });
+
+  // ---------- 连接状态 ----------
+
+  const socket = createChatSocket({
+    onFrame,
+    onState(state) {
+      if (state === 'online') {
+        stateBadge.className = 'badge';
+        stateBadge.textContent = '已连接';
+        addBubble('sys', '已连接，可以直接发消息，也可以发送指令（/help 查看全部指令）');
+      } else {
+        stateBadge.className = 'badge offline';
+        stateBadge.textContent = '连接已断开';
+      }
+    },
+  });
+</script>
+
+</body>
+</html>
