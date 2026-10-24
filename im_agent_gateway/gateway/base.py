@@ -23,6 +23,7 @@ class InboundMessage:
     msg_type: str       # "text" / "image" / ...
     content: str        # 纯文本（群聊 @ 前缀已在通道层剥离）
     reply_token: str    # 回复所需的协议 token
+    replay: bool = False  # 看门狗唤醒后交棒的待处理消息；结果走 send_push 整条回传
 
 
 @dataclass
@@ -46,6 +47,11 @@ class IMChannel(ABC):
         self.on_message: Callable[[InboundMessage], Awaitable[None]] | None = None
         self.on_event: Callable[[InboundEvent], Awaitable[None]] | None = None
 
+    @property
+    def connected(self) -> bool:
+        """通道长连接是否就绪；默认视为就绪（如用 HTTP 发送的通道）。"""
+        return True
+
     # ---------- 生命周期 ----------
 
     @abstractmethod
@@ -65,6 +71,15 @@ class IMChannel(ABC):
     @abstractmethod
     async def send_stream(self, msg: InboundMessage, stream_id: str, content: str, finish: bool) -> None:
         """发送/刷新流式消息；finish=True 结束该流。"""
+
+    async def send_push(self, msg: InboundMessage, content: str) -> None:
+        """按会话身份（chat_id/chat_type）主动回传，不依赖连接期 reply_token。
+
+        用于看门狗唤醒服务后的结果回传：服务已重建连接，旧 reply_token 可能失效。
+        默认退化为 send_text——本就按 chat_id 回复的通道无需覆写；需按 chatid
+        主动推送的通道（如企微）覆写本方法即可。
+        """
+        await self.send_text(msg, content)
 
     async def send_welcome(self, evt: InboundEvent, content: str) -> None:
         """回复进入会话事件；默认退化为 send_text，企微需覆写用专用欢迎语指令。"""

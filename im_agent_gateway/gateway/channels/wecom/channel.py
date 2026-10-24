@@ -40,6 +40,11 @@ class WeComChannel(IMChannel):
     async def close(self) -> None:
         await self._client.close()
 
+    @property
+    def connected(self) -> bool:
+        # 服务被看门狗唤醒后重放消息前，用它确认长连接已就绪
+        return self._client.connected.is_set()
+
     # ---------- 报文归一化 ----------
 
     async def _on_raw_msg(self, body: dict) -> None:
@@ -90,6 +95,11 @@ class WeComChannel(IMChannel):
 
     async def send_stream(self, msg: InboundMessage, stream_id: str, content: str, finish: bool) -> None:
         await self._client.send_stream(msg.reply_token, stream_id, content, finish)
+
+    async def send_push(self, msg: InboundMessage, content: str) -> None:
+        # 交棒后 reply_token 失效：按 chatid 主动推送，不依赖入站消息的连接
+        chat_type = 2 if msg.chat_type == "group" else 1
+        await self._client.send_push_markdown(msg.chat_id, chat_type, content)
 
     async def send_welcome(self, evt: InboundEvent, content: str) -> None:
         # 企微要求进入会话事件后 5 秒内用专用欢迎语指令回复

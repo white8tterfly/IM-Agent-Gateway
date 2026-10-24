@@ -80,9 +80,22 @@ class Config:
     # ---- 日志 ----
     log_level: str = "INFO"
 
+    # ---- 看门狗 / 消息唤醒 ----
+    watch_enabled: bool = False      # 看门狗总开关：服务不自动起，由看门狗监听并唤醒
+    idle_exit: bool = False          # 服务空闲自动退开关：1=空闲超时退出，0=常驻
+    idle_exit_min: float = 10.0      # 空闲判定分钟数（仅 idle_exit=True 生效）
+    wake_reply: str = "正在唤醒…"    # 看门狗唤醒前的占位回复文案
+    service_cmd: str = "python main.py"  # 看门狗拉起服务所用命令
+    wake_handoff_file: str = ".wake_pending.json"  # 唤醒消息交接文件（相对项目根）
+
     @property
     def qoder_cwd_resolved(self) -> Path:
         return Path(self.qoder_cwd).expanduser().resolve()
+
+    @property
+    def wake_handoff_file_resolved(self) -> Path:
+        p = Path(self.wake_handoff_file).expanduser()
+        return p if p.is_absolute() else (PROJECT_ROOT / p)
 
     def agent_enabled(self, name: str) -> bool:
         """ENABLED_AGENTS 留空视为全部启用。"""
@@ -159,6 +172,12 @@ def load_config(env_file: Path | None = None) -> Config:
         stream_chunk_size=int(_env("STREAM_CHUNK_SIZE") or 200),
         heartbeat_interval_sec=float(_env("HEARTBEAT_INTERVAL_SEC") or 30.0),
         log_level=(_env("LOG_LEVEL") or "INFO").upper(),
+        watch_enabled=_env("WATCH_ENABLED").lower() in ("1", "true", "yes"),
+        idle_exit=_env("IDLE_EXIT").lower() in ("1", "true", "yes"),
+        idle_exit_min=float(_env("IDLE_EXIT_MIN") or 10),
+        wake_reply=_env("WAKE_REPLY") or "正在唤醒…",
+        service_cmd=_env("SERVICE_CMD") or "python main.py",
+        wake_handoff_file=_env("WAKE_HANDOFF_FILE") or ".wake_pending.json",
     )
 
     # 默认 Agent 须在 AGENTS 声明中（注册制校验），不在则回退到声明列表第一个
