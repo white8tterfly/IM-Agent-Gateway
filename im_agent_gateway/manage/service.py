@@ -28,29 +28,6 @@ _SENSITIVE_NAME_RE = re.compile(r"key|secret|token|pat|password", re.IGNORECASE)
 DEFAULT_LOG_FILE = PROJECT_ROOT / "logs" / "im_agent_gateway.log"
 
 
-def config_view(cfg: Config) -> dict:
-    """配置脱敏视图（旧口径，CLI config show 过渡期使用）。
-
-    敏感字段（命中 key/secret/token/pat/password 特征）非空显示 ******，
-    空值保持空串；set 排序、Path 转字符串、dict 值转字符串，便于展示。
-    """
-    out: dict = {}
-    for f in fields(Config):
-        val = getattr(cfg, f.name)
-        if _SENSITIVE_NAME_RE.search(f.name):
-            # 非空一律显示 ******（不区分长度，避免泄漏任何字符）
-            out[f.name] = "******" if val else ""
-            continue
-        if isinstance(val, set):
-            val = sorted(val)
-        elif isinstance(val, Path):
-            val = str(val)
-        elif isinstance(val, dict):
-            val = {k: str(v) for k, v in val.items()}
-        out[f.name] = val
-    return out
-
-
 def _format_config_value(field: str, val: object) -> str:
     """把 Config 字段值转成适合展示与写回 .env 的字符串。
 
@@ -187,10 +164,6 @@ class ManageService:
             return []
         text = self.log_file.read_text(encoding="utf-8", errors="replace")
         return text.splitlines()[-lines:]
-
-    def config_view(self) -> dict:
-        """当前生效配置（旧口径，供 CLI show 过渡期使用）：敏感字段脱敏，其余原样。"""
-        return config_view(self.cfg)
 
     def config_grouped(self) -> dict:
         """分组配置视图：常用 / 高级 / 未登记三组，每项带说明与当前值。"""
