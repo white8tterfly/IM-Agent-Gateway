@@ -15,8 +15,8 @@ import sys
 import httpx
 
 from im_agent_gateway.config import Config, load_config
-from im_agent_gateway.manage.persist import set_env_value
-from im_agent_gateway.manage.service import config_view
+from im_agent_gateway.manage.commands import ConfigOps
+from im_agent_gateway.manage.service import config_grouped_view
 
 # 在线命令不可达时的统一提示（服务睡眠、未启动或 Web 控制台未开启）
 OFFLINE_TIP = (
@@ -29,9 +29,21 @@ OFFLINE_TIP = (
 # ---------- 离线命令 ----------
 
 def cmd_config_show(cfg: Config) -> str:
-    """展示当前生效配置：与 /api/config 同一脱敏口径。"""
-    view = config_view(cfg)
-    return "\n".join(f"{k} = {v}" for k, v in view.items())
+    """展示当前生效配置：常用/高级分组，每项带说明（与 /api/config 同一视图）。"""
+    view = config_grouped_view(cfg)
+    lines: list[str] = []
+    # 三组依次渲染：常用配置 → 高级设置 → 未登记（只读）；空组跳过不输出标题
+    for title, group in (("常用配置", view["common"]),
+                         ("高级设置", view["advanced"]),
+                         ("未登记（只读）", view["unknown"])):
+        if not group:
+            continue
+        lines.append(f"【{title}】")
+        for it in group:
+            lines.append(f"{it['label']}（{it['key']}）= {it['value']}")
+            lines.append(f"  说明：{it['desc']}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def cmd_config_check(cfg: Config) -> str:
@@ -90,10 +102,15 @@ def cmd_config_check(cfg: Config) -> str:
 
 
 def cmd_config_set(cfg: Config, key: str, value: str) -> str:
-    """把键值写回项目 .env（键名规范化为大写），提示重启生效。"""
-    key = key.strip().upper()
-    set_env_value(cfg.env_file, key, value)
-    return f"已写入 {key}={value} 到 {cfg.env_file}（重启服务后生效）"
+    """把键值写回项目 .env：走统一命令层 ConfigOps（与 Web 管理台同一实现）。
+
+    校验口径与 POST /api/config 完全一致：未登记键拒绝修改，
+    敏感项留空视为「不修改」而非清空，避免误清凭证。
+    """
+    err = ConfigOps.set(cfg, key, value)
+    if err is not None:
+        return err
+    return f"已写入 {key.strip().upper()}={value} 到 {cfg.env_file}（重启服务后生效）"
 
 
 # ---------- 在线命令（管理端点） ----------

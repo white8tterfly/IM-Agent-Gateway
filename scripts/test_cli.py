@@ -25,7 +25,7 @@ def base_cfg() -> Config:
     return Config(bot_id="", secret="")
 
 
-# ---------- 离线：config show（脱敏口径与 /api/config 一致） ----------
+# ---------- 离线：config show（分组视图与 /api/config 同一口径） ----------
 
 def test_show() -> None:
     cfg = base_cfg()
@@ -33,9 +33,11 @@ def test_show() -> None:
     cfg.feishu_app_secret = "fs-test"
     cfg.bot_id = "bot-123"
     out = manage.cmd_config_show(cfg)
-    check("sf_api_key = ******" in out and "feishu_app_secret = ******" in out,
+    check("【常用配置】" in out and "【高级设置】" in out, "show 按常用/高级分组")
+    check("接入哪些智能体" in out and "说明：" in out, "show 每项带通俗名称与说明")
+    check("API_KEY）= ******" in out and "FEISHU_APP_SECRET）= ******" in out,
           "show 敏感值脱敏")
-    check("bot_id = bot-123" in out and "webui_port = 8790" in out,
+    check("BOT_ID）= bot-123" in out and "WEBUI_PORT）= 8790" in out,
           "show 常规配置明文")
 
 
@@ -66,7 +68,7 @@ def test_check() -> None:
     check("一切正常" in out, "check 健康配置输出正常结论")
 
 
-# ---------- 离线：config set（写回临时 .env） ----------
+# ---------- 离线：config set（统一命令层写回临时 .env） ----------
 
 def test_set() -> None:
     with tempfile.TemporaryDirectory() as td:
@@ -79,6 +81,11 @@ def test_set() -> None:
         check("WEBUI_PORT=9000" in content, "set 写回键值（键名规范化为大写）")
         check("X=1" in content, "set 保留原有内容")
         check("重启" in out, "set 提示重启生效")
+        # 统一命令层校验：未登记键拒绝、敏感项留空=不改
+        err = manage.cmd_config_set(cfg, "not_a_key", "x")
+        check("不支持" in err, "set 未登记键拒绝")
+        err = manage.cmd_config_set(cfg, "api_key", "")
+        check("不修改" in err, "set 敏感项空值拒绝（留空=不改）")
 
 
 # ---------- 在线：管理端点命令（MockTransport 打假 API） ----------
@@ -133,7 +140,8 @@ def test_smoke() -> None:
         [sys.executable, "manage.py", "config", "show"],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60,
     )
-    check(r.returncode == 0 and "webui_port" in r.stdout, "子进程 config show")
+    check(r.returncode == 0 and "【常用配置】" in r.stdout and "WEBUI_PORT" in r.stdout,
+          "子进程 config show")
     r = subprocess.run(
         [sys.executable, "manage.py", "config", "check"],
         capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60,
