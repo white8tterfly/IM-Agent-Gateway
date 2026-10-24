@@ -47,8 +47,17 @@ export const getTasks = () => json('/api/tasks');
 // 运行日志尾部
 export const getLogs = (lines = 200) => json(`/api/logs?lines=${lines}`);
 
-// 当前生效配置（敏感值已脱敏）
+// 当前生效配置：常用 / 高级 / 未登记三组，每项带说明与当前值（敏感值已脱敏）
 export const getConfig = () => json('/api/config');
+
+// 修改配置并写回项目 .env（与 CLI config set 同一命令层，重启服务后生效）
+export function setConfig(key, value) {
+  return json('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, value }),
+  });
+}
 
 // 睡眠态一键唤醒（由看门狗托管的 /api/wake 处理）
 export const wakeService = () => json('/api/wake', { method: 'POST' });

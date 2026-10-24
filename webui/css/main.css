@@ -267,6 +267,87 @@ details summary {
 }
 details summary:active { transform: scale(0.97); }
 details .kv { margin-top: 14px; }
+/* 配置区折叠面板内容与 summary 的间距 */
+#config-advanced, #config-unknown { margin-top: 12px; }
+
+/* ---------- 配置区（常用平铺 + 高级折叠 + 行内编辑） ---------- */
+
+.cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 4px;
+  border-bottom: 1px dashed var(--border);
+  animation: pop-in 0.4s var(--spring) backwards;
+}
+
+.cfg-row:last-child { border-bottom: none; }
+.cfg-row .info { flex: 1; min-width: 0; }
+.cfg-row .name { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cfg-row .desc { font-size: 13px; color: var(--muted); }
+.cfg-row .value {
+  max-width: 320px;
+  font-size: 13px;
+  color: var(--muted);
+  font-family: Consolas, "Courier New", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 待重启角标：改完还没重启时的新值标记 */
+.pend-badge {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--warn);
+  background: #f8f1e2;
+  padding: 1px 9px;
+  border-radius: 999px;
+}
+
+/* 行内编辑态：输入框 + 保存 / 取消 */
+.cfg-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cfg-edit input {
+  width: 260px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, transform 0.25s var(--spring);
+}
+
+.cfg-edit input:focus { border-color: var(--brand); transform: scale(1.02); }
+
+.btn.small { font-size: 13px; padding: 6px 16px; }
+
+/* 全局 toast：保存成功等轻提示 */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  background: #243133;
+  color: #fff;
+  padding: 11px 26px;
+  border-radius: 999px;
+  font-size: 14px;
+  z-index: 60;
+  box-shadow: 0 10px 30px rgba(31, 41, 51, 0.25);
+  animation: toast-in 0.45s var(--spring);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 16px) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
 
 /* ---------- 遮罩面板（睡眠 / 离线） ---------- */
 
