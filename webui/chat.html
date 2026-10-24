@@ -18,6 +18,16 @@
   <span id="state-badge" class="badge offline">未连接</span>
 </header>
 
+<!-- 睡眠 / 离线遮罩面板（与管理台同款交互：睡着可一键唤醒，没启动则提示先启动） -->
+<div id="overlay" class="overlay hidden">
+  <div class="panel">
+    <h1 id="overlay-title">服务正在休息</h1>
+    <p id="overlay-text">服务暂时没有在运行，你可以把它叫醒。</p>
+    <button id="wake-btn" class="btn big">点击唤醒</button>
+    <p id="overlay-tip" class="hidden" style="margin-top:18px; margin-bottom:0;">正在尝试叫醒服务，请稍等…</p>
+  </div>
+</div>
+
 <div class="chat-layout">
   <main id="chat-main" class="chat-main">
     <div class="bubble sys">正在连接服务…</div>
@@ -31,14 +41,20 @@
 </div>
 
 <script type="module">
-  // 聊天台页面逻辑：WebSocket 帧渲染（流式气泡 / 文本气泡）+ 发送交互
+  // 聊天台页面逻辑：WebSocket 帧渲染（流式气泡 / 文本气泡）+ 发送交互 + 睡眠态唤醒
   import { createChatSocket } from './js/ws.js';
+  import { detectState, getStatus, wakeService } from './js/api.js';
 
   const $ = (sel) => document.querySelector(sel);
   const chatMain = $('#chat-main');
   const textInput = $('#chat-text');
   const sendBtn = $('#send-btn');
   const stateBadge = $('#state-badge');
+  const overlay = $('#overlay');
+  const overlayTitle = $('#overlay-title');
+  const overlayText = $('#overlay-text');
+  const wakeBtn = $('#wake-btn');
+  const overlayTip = $('#overlay-tip');
 
   // ---------- 气泡渲染 ----------
 
@@ -115,18 +131,72 @@
     textInput.style.height = Math.min(textInput.scrollHeight, 140) + 'px';
   });
 
+  // ---------- 睡眠 / 离线遮罩 ----------
+
+  // 连不上时探测服务状态：睡着 → 遮罩 + 唤醒按钮；没启动 → 遮罩提示先启动
+  async function probeService() {
+    const state = await detectState();
+    if (state === 'online') {
+      return; // 探测间隙服务自己回来了，等 WS 自动重连即可
+    }
+    if (state === 'sleeping') {
+      overlayTitle.textContent = '服务正在休息';
+      overlayText.textContent = '服务暂时没有在运行，你可以把它叫醒。';
+      wakeBtn.classList.remove('hidden');
+    } else {
+      overlayTitle.textContent = '服务没有启动';
+      overlayText.textContent = '既没有查到运行中的服务，也没有找到值守的看门狗。请先在电脑上启动服务，再刷新本页。';
+      wakeBtn.classList.add('hidden');
+    }
+    overlay.classList.remove('hidden');
+  }
+
+  // 唤醒按钮：与管理台同款——打 /api/wake 后轮询等上线，收起遮罩后 WS 自动重连
+  wakeBtn.addEventListener('click', async () => {
+    wakeBtn.disabled = true;
+    wakeBtn.textContent = '正在叫醒…';
+    overlayTip.classList.remove('hidden');
+    try {
+      await wakeService();
+    } catch (_) { /* 端口交接瞬间可能断开，继续轮询即可 */ }
+    const deadline = Date.now() + 60 * 1000;
+    const poll = setInterval(async () => {
+      try {
+        await getStatus();
+        clearInterval(poll);
+        wakeBtn.disabled = false;
+        wakeBtn.textContent = '点击唤醒';
+        overlayTip.classList.add('hidden');
+        overlay.classList.add('hidden');
+      } catch (_) {
+        if (Date.now() > deadline) {
+          clearInterval(poll);
+          wakeBtn.disabled = false;
+          wakeBtn.textContent = '点击唤醒';
+          overlayText.textContent = '叫醒服务超过了 60 秒还没成功，请到电脑上检查服务进程。';
+        }
+      }
+    }, 1500);
+  });
+
   // ---------- 连接状态 ----------
 
+  let welcomed = false;  // 欢迎语只插一次，重连回来不刷屏
   const socket = createChatSocket({
     onFrame,
     onState(state) {
       if (state === 'online') {
         stateBadge.className = 'badge';
         stateBadge.textContent = '已连接';
-        addBubble('sys', '已连接，可以直接发消息，也可以发送指令（/help 查看全部指令）');
+        overlay.classList.add('hidden');
+        if (!welcomed) {
+          welcomed = true;
+          addBubble('sys', '已连接，可以直接发消息，也可以发送指令（/help 查看全部指令）');
+        }
       } else {
         stateBadge.className = 'badge offline';
         stateBadge.textContent = '连接已断开';
+        probeService();  // 断开时探测：睡着给一键唤醒，彻底没起给启动提示
       }
     },
   });
