@@ -137,12 +137,13 @@ class ManageService:
         }
 
     def agents(self) -> list[dict]:
-        """Agent 列表：注册名 / 展示名 / 类型 / 开关 / 可用性 / 路由描述。"""
+        """Agent 列表：注册名 / 展示名 / 用途 / 档位 / 开关 / 可用性 / 路由描述。"""
         return [
             {
                 "name": a.name,
                 "label": a.label,
                 "kind": a.kind,
+                "complexity": a.complexity,
                 "active": self.registry.is_active(a.name),
                 "available": a.available,
                 "routing_hint": a.route_description,

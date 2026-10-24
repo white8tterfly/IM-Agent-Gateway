@@ -205,14 +205,19 @@
       host.innerHTML = '<div class="agent-row"><div class="desc">还没有接入任何智能体</div></div>';
       return;
     }
+    // 用途与档位的通俗展示名（与后端 kind / complexity 配置对应）
+    const KIND_CN = { chat: '对话', coding: '编码', office: '办公' };
+    const LEVEL_CN = { simple: '简单', mid: '中等', complex: '复杂' };
     agents.forEach((a) => {
       const row = document.createElement('div');
       row.className = 'agent-row';
       const disabled = a.active && !a.available;
+      const levelText = a.complexity ? `，档位：${LEVEL_CN[a.complexity] || a.complexity}` : '';
       row.innerHTML = `
         <div class="info">
           <div class="name">${a.label}</div>
           <div class="desc">${a.routing_hint}</div>
+          <div class="desc">用途：${KIND_CN[a.kind] || a.kind || '未设置'}${levelText}</div>
           ${!a.available ? '<div class="state-note">暂不可用：缺少配置或未安装</div>' : ''}
         </div>
         <button class="toggle ${a.active ? 'on' : ''}" ${disabled ? 'disabled' : ''}

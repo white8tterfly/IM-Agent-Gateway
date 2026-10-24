@@ -130,7 +130,7 @@ async def main() -> None:
         check(agents[0]["name"] == "alpha" and agents[0]["active"] is True
               and agents[0]["available"] is True, "agents 含 alpha 开关与可用状态")
         check(agents[1]["available"] is False and agents[1]["active"] is False, "agents 含 beta 不可用状态")
-        check(all(k in agents[0] for k in ("name", "label", "kind", "active", "available", "routing_hint")),
+        check(all(k in agents[0] for k in ("name", "label", "kind", "complexity", "active", "available", "routing_hint")),
               "agents 字段齐全")
 
         # POST /api/agents/{name}/active：与 IM 指令同一管理命令层，含 .env 写回
