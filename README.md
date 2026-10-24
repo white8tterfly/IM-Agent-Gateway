@@ -230,7 +230,7 @@ im_agent_gateway/
     channels/        各 IM 通道目录（每个 IM 一个子目录，暴露 Channel 类即可接入）
       wecom/         示例通道：企业微信智能机器人（长连接，纯协议层 + 报文归一化）
       feishu/        示例通道：飞书企业自建应用（lark-oapi 长连接，归一化 + 流式回复）
-      webui/         示例通道：本机 Web 控制台（HTTP + WebSocket，管理台与聊天台页面，见「Web 控制台」节）
+      webui/         示例通道：本机 Web 控制台（HTTP + WebSocket；页面在项目根 webui/，见「Web 控制台」节）
   router/            路由层：归一化消息分发（IM 无关）
     dispatcher.py    消息路由：框架命令（/agent、/help、/status）、白名单、Agent 分发与指令转发、流式回复、空闲判定
     jev_router.py    决策路由：调用决策模型网关，失败/低置信度自动降级
@@ -241,6 +241,7 @@ im_agent_gateway/
     qoder/          示例 Agent：编码（CLI 子进程执行、会话管理、输出解析）
     workbuddy/      示例 Agent：办公（CLI 子进程执行、会话续接、流式解析）
     trae/           示例 Agent：编码（开源 CLI，任务进度/结果提取）
+webui/               Web 控制台页面（管理台 index.html + 聊天台 chat.html + css/js，由 webui 通道与睡眠态托管共同服务）
 examples/
   im_channel_example.py    IM 通道接入示例（教程式注释 + 全链路演示，可直接运行）
   agent_example.py         Agent 接入示例（教程式注释 + 全链路演示，可直接运行）
