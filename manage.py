@@ -25,6 +25,10 @@ OFFLINE_TIP = (
     "可给机器人发条消息唤醒服务，或在服务所在电脑上执行 python main.py。"
 )
 
+# 智能体用途与复杂度档位的中文展示名（agents 列表输出用）
+KIND_CN = {"chat": "对话", "coding": "编码", "office": "办公"}
+LEVEL_CN = {"simple": "简单", "mid": "中等", "complex": "复杂"}
+
 
 # ---------- 离线命令 ----------
 
@@ -152,7 +156,12 @@ def cmd_agents(cfg: Config, transport=None) -> str:
     for a in agents:
         state = "已开启" if a["active"] else "已关闭"
         note = "" if a["available"] else "（暂不可用）"
-        lines.append(f"- {a['label']}（{a['name']}）：{state}{note}")
+        # 用途与档位展示为通俗中文；旧版服务可能不带 complexity 字段，缺省视为未配置
+        kind = KIND_CN.get(a.get("kind", ""), a.get("kind", "") or "未设置")
+        level = a.get("complexity", "")
+        level = LEVEL_CN.get(level, level) if level else ""
+        extra = f" · 用途 {kind}" + (f" · 档位 {level}" if level else "")
+        lines.append(f"- {a['label']}（{a['name']}）：{state}{note}{extra}")
     lines.append("开关方式：python manage.py agent on|off <名称>")
     return "\n".join(lines)
 

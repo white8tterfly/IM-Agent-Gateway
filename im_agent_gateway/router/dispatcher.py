@@ -103,7 +103,7 @@ class MessageRouter:
         names = "|".join(self.registry.names) or "…"
         lines = [
             "IM-Agent Gateway 指令帮助",
-            "直接发送消息：由 Jev 决策模型自动路由到最合适的 Agent（不可用时按关键词降级）",
+            "直接发送消息：由 Jev 按用途与问题复杂度两级路由到最合适的 Agent（不可用时按关键词降级）",
             "",
             f"/agent [{names}|auto]  切换路由 Agent（固定/自动）",
             "/agent on|off <名称>   开启/关闭 Agent 服务",
@@ -302,25 +302,76 @@ class MessageRouter:
     # ---------- 工具 ----------
 
     async def _resolve_agent(self, chat_key: str, query: str) -> BaseAgent | None:
-        """路由决策：会话固定 → Jev 决策 → 关键词兜底 → 默认 Agent。"""
-        active = {a.name: a for a in self.registry.active_agents}
+        """两级路由决策：会话固定 → 用途决策 → 用途内档位/顺序选择 → 默认兜底。"""
+        active = self.registry.active_agents  # 保持 .env 声明顺序
         if not active:
             return None
+        by_name = {a.name: a for a in active}
+        # /agent 固定路由优先，不进两级决策
         override = self.chat_agents.get(chat_key)
-        if override in active:
-            return active[override]
+        if override in by_name:
+            return by_name[override]
         if self.cfg.auto_route and query:
-            # 自动路由：Jev 决策优先，未配置/失败/低置信退化到关键字意图解析
-            if self.jev.available:
-                name = await self.jev.route(query, list(active.values()))
-                if name in active:
-                    return active[name]
-            name = self.keyword.route(query, list(active.values()))
-            if name in active:
-                return active[name]
-        if self.cfg.default_agent in active:
-            return active[self.cfg.default_agent]
-        return self.registry.active_agents[0]
+            # 第一级：判定用途（单用途短路；Jev 优先，失败/低置信退化关键词计分）
+            kind = await self._decide_kind(query, active)
+            if kind is None:
+                # 用途全部未命中：退化到 DEFAULT_AGENT 所在用途（不在活跃则取第一个的用途）
+                fallback = by_name.get(self.cfg.default_agent) or active[0]
+                kind = fallback.kind
+            # 第二级：用途内选择（单 Agent 短路；条件齐备走复杂度档位决策）
+            picked = await self._pick_in_kind(query, active, kind)
+            if picked is not None:
+                return picked
+        if self.cfg.default_agent in by_name:
+            return by_name[self.cfg.default_agent]
+        return active[0]
+
+    async def _decide_kind(self, query: str, active: list[BaseAgent]) -> str | None:
+        """第一级用途决策：活跃用途多于一个才决策，Jev choice 优先、关键词退化。"""
+        # 按声明顺序收集去重后的活跃用途
+        kinds: list[str] = []
+        for agent in active:
+            if agent.kind not in kinds:
+                kinds.append(agent.kind)
+        # 单一用途（含空活跃）无需决策，直接短路省一次请求
+        if len(kinds) <= 1:
+            return kinds[0] if kinds else None
+        # Jev 第一问：choice「用途」，置信度过低/失败由 route_kind 返回 None
+        if self.jev.available:
+            kind = await self.jev.route_kind(query, kinds)
+            if kind in kinds:
+                return kind
+        # 关键词退化：按用途词表计分（chat 不声明词表，未命中由调用方兜底）
+        kind = self.keyword.route_kind(query, kinds)
+        if kind in kinds:
+            return kind
+        return None
+
+    async def _pick_in_kind(self, query: str, active: list[BaseAgent],
+                            kind: str) -> BaseAgent | None:
+        """第二级用途内选择：档位决策或声明顺序，用途内无活跃 Agent 返回 None。"""
+        in_kind = [a for a in active if a.kind == kind]
+        if not in_kind:
+            return None
+        # 用途内唯一 Agent：直接返回，省一次复杂度请求
+        if len(in_kind) == 1:
+            return in_kind[0]
+        # 复杂度候选 = 用途内显式配置了档位的 Agent；未配齐档位不进 Jev
+        leveled = [a for a in in_kind if a.complexity]
+        if not (self.cfg.complexity_route and self.jev.available
+                and leveled and len(leveled) == len(in_kind)):
+            return in_kind[0]
+        # 档位去重后交 Jev 第二问；低置信/失败取声明顺序第一个
+        levels: list[str] = []
+        for agent in leveled:
+            if agent.complexity not in levels:
+                levels.append(agent.complexity)
+        level = await self.jev.route_complexity(query, levels)
+        if level:
+            for agent in in_kind:
+                if agent.complexity == level:
+                    return agent
+        return in_kind[0]
 
     def _agent_label(self, key: str) -> str:
         agent = self.registry.get(key)

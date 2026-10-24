@@ -100,7 +100,7 @@ def handler(request: httpx.Request) -> httpx.Response:
         })
     if request.url.path == "/api/agents":
         return httpx.Response(200, json=[
-            {"name": "alpha", "label": "甲助手", "kind": "chat",
+            {"name": "alpha", "label": "甲助手", "kind": "chat", "complexity": "simple",
              "active": True, "available": True, "routing_hint": "日常问答"},
         ])
     if request.url.path == "/api/agents/alpha/active" and request.method == "POST":
@@ -122,6 +122,7 @@ def test_online() -> None:
 
     out = manage.cmd_agents(cfg, transport=tr)
     check("甲助手" in out and "已开启" in out, "agents 展示列表与开关")
+    check("用途 对话" in out and "档位 简单" in out, "agents 展示用途与档位")
 
     out = manage.cmd_agent_active(cfg, "alpha", True, transport=tr)
     check("已开启" in out and "alpha" in out, "agent on 返回成功文案")
