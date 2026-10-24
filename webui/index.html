@@ -171,6 +171,10 @@
 
   // ---------- 区块渲染 ----------
 
+  // 渲染数据指纹：数据未变化时跳过 DOM 重建，避免轮询触发入场动画反复重放（页面闪烁）
+  const dataHash = (x) => { try { return JSON.stringify(x); } catch { return String(x); } };
+  let lastStatusSig = '', lastAgentsSig = '', lastTasksSig = '', lastLogsSig = '', lastConfigSig = '';
+
   function fmtIdle(row) {
     const idle = row.idle;
     if (!idle || !idle.exit_enabled) {
@@ -186,6 +190,9 @@
 
   async function renderStatus() {
     const st = await getStatus();
+    const sig = dataHash(st);
+    if (sig === lastStatusSig) return;
+    lastStatusSig = sig;
     const channels = st.channels.map((c) =>
       `${c.name}（${c.connected ? '已连接' : '未连接'}）`).join('、') || '无';
     $('#status-body').innerHTML = [
@@ -198,6 +205,9 @@
 
   async function renderAgents() {
     const agents = await getAgents();
+    const sig = dataHash(agents);
+    if (sig === lastAgentsSig) return;
+    lastAgentsSig = sig;
     $('#agent-count').textContent = `${agents.filter((a) => a.active).length} / ${agents.length} 已开启`;
     const host = $('#agent-list');
     host.innerHTML = '';
@@ -245,6 +255,9 @@
 
   async function renderTasks() {
     const data = await getTasks();
+    const sig = dataHash(data);
+    if (sig === lastTasksSig) return;
+    lastTasksSig = sig;
     $('#task-count').textContent = `${data.inflight} 个进行中`;
     const host = $('#task-list');
     if (!data.recent.length) {
@@ -264,7 +277,10 @@
 
   async function renderLogs() {
     const data = await getLogs(200);
-    $('#log-body').textContent = data.lines.join('\n') || '还没有日志内容';
+    const sig = data.lines.join('\n');
+    if (sig === lastLogsSig) return;
+    lastLogsSig = sig;
+    $('#log-body').textContent = sig || '还没有日志内容';
   }
 
   // ---------- 配置区（常用平铺 + 高级折叠 + 行内编辑） ----------
@@ -392,6 +408,10 @@
     // 正在编辑时不重建列表，防止输入框与已输入内容被轮询刷掉
     if (cfgEditKey !== null) { return; }
     const cfg = await getConfig();
+    // 指纹同时纳入待重启缓存：保存后即便后端值未变也要重绘以显示「待重启」角标
+    const sig = dataHash(cfg) + '|' + dataHash([...cfgPending.entries()]);
+    if (sig === lastConfigSig) return;
+    lastConfigSig = sig;
     const commonHost = $('#config-common');
     commonHost.innerHTML = '';
     cfg.common.forEach((it) => commonHost.appendChild(cfgRow(it, true)));
