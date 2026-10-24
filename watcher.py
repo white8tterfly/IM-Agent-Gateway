@@ -16,6 +16,7 @@ from pathlib import Path
 from im_agent_gateway.config import load_config
 from im_agent_gateway.gateway.handoff import dump
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.gateway.watch_http import WatchHttpServer
 from im_agent_gateway.plugins import load_channel
 
 from main import setup_logging
@@ -45,6 +46,7 @@ async def _session(cfg) -> None:
     gateway = Gateway()
     wake_msg = None
     wake_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
 
     async def on_message(msg) -> None:
         nonlocal wake_msg
@@ -52,35 +54,70 @@ async def _session(cfg) -> None:
             wake_msg = msg
             wake_event.set()
 
-    for spec in cfg.channels:
-        channel = load_channel(spec, cfg)
-        gateway.register(channel)
-        channel.on_message = on_message
+    def _on_http_wake() -> None:
+        # 由 HTTP 托管线程调用：跨线程安全地触发唤醒（与 IM 消息唤醒同一流程）
+        loop.call_soon_threadsafe(wake_event.set)
 
-    run_task = asyncio.create_task(gateway.run())
-    wake_task = asyncio.create_task(wake_event.wait())
-    done, pending = await asyncio.wait(
-        {run_task, wake_task}, return_when=asyncio.FIRST_COMPLETED,
-    )
-
-    woke = wake_task in done and wake_msg is not None
-    already_running = _service_running() if woke else False
-    if woke and not already_running:
-        # 占位回复须在释放连接之前（此刻连接尚在，必达）
+    # 睡眠态托管：服务睡眠期间占住 webui 端口，页面可打开并提供唤醒按钮；
+    # 端口与服务交接——唤醒后先停托管再拉服务，任一时刻只有一个进程占用
+    holder = None
+    if cfg.watch_http_enabled:
+        holder = WatchHttpServer(
+            static_dir=cfg.webui_static_resolved,
+            host=cfg.webui_host, port=cfg.webui_port,
+            on_wake=_on_http_wake,
+        )
         try:
-            await wake_msg.channel.send_text(wake_msg, cfg.wake_reply)
-        except Exception:
-            logger.exception("占位回复失败，继续唤醒")
-        dump(wake_msg, cfg.wake_handoff_file_resolved)
+            holder.start()
+            logger.info("睡眠态托管已启动：http://%s:%d（唤醒后自动交还端口）",
+                        cfg.webui_host, cfg.webui_port)
+        except OSError:
+            logger.exception("睡眠态托管启动失败（端口 %s 可能被占用）", cfg.webui_port)
+            holder = None
 
-    for task in pending:
-        task.cancel()
     try:
-        if run_task in done:
-            run_task.result()  # 通道异常在此抛出
-    except Exception:
-        logger.exception("看门狗通道退出")
-    await gateway.close()
+        for spec in cfg.channels:
+            channel = load_channel(spec, cfg)
+            if not channel.wake_listen:
+                # 通道自声明无需看门狗独立监听（如 HTTP 被动型 webui），跳过注册
+                logger.info("跳过通道 %s（自声明无需看门狗监听）", channel.name)
+                continue
+            gateway.register(channel)
+            channel.on_message = on_message
+
+        tasks = {asyncio.create_task(wake_event.wait())}
+        run_task = None
+        if len(gateway) > 0:
+            run_task = asyncio.create_task(gateway.run())
+            tasks.add(run_task)
+        else:
+            logger.info("没有需要监听的 IM 通道，仅提供睡眠态托管")
+        done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        # 唤醒来源：IM 消息或网页按钮，两者走同一后续流程
+        woke = wake_event.is_set()
+        already_running = _service_running() if woke else False
+        if woke and not already_running and wake_msg is not None:
+            # 占位回复须在释放连接之前（此刻连接尚在，必达）
+            try:
+                await wake_msg.channel.send_text(wake_msg, cfg.wake_reply)
+            except Exception:
+                logger.exception("占位回复失败，继续唤醒")
+            dump(wake_msg, cfg.wake_handoff_file_resolved)
+
+        for task in pending:
+            task.cancel()
+        try:
+            if run_task is not None and run_task in done:
+                run_task.result()  # 通道异常在此抛出
+        except Exception:
+            logger.exception("看门狗通道退出")
+        await gateway.close()
+    finally:
+        if holder is not None:
+            holder.stop()  # 端口交还：先停托管再拉服务，交接无冲突
 
     if not (woke and not already_running):
         return

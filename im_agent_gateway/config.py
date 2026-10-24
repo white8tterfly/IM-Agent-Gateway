@@ -87,6 +87,7 @@ class Config:
     wake_reply: str = "正在唤醒…"    # 看门狗唤醒前的占位回复文案
     service_cmd: str = "python main.py"  # 看门狗拉起服务所用命令
     wake_handoff_file: str = ".wake_pending.json"  # 唤醒消息交接文件（相对项目根）
+    watch_http_enabled: bool = False  # 睡眠态托管开关：睡眠期间占住 webui 端口提供页面与唤醒按钮
 
     # ---- Web 控制台（webui 通道）----
     webui_enabled: bool = False    # webui 通道接入开关：开启时自动并入 CHANNELS 声明
@@ -209,6 +210,7 @@ def load_config(env_file: Path | None = None) -> Config:
         wake_reply=_env("WAKE_REPLY") or "正在唤醒…",
         service_cmd=_env("SERVICE_CMD") or "python main.py",
         wake_handoff_file=_env("WAKE_HANDOFF_FILE") or ".wake_pending.json",
+        watch_http_enabled=_env("WATCH_HTTP_ENABLED").lower() in ("1", "true", "yes"),
         webui_enabled=_env("WEBUI_ENABLED").lower() in ("1", "true", "yes"),
         webui_host=_env("WEBUI_HOST") or "127.0.0.1",
         webui_port=int(_env("WEBUI_PORT") or 8790),
