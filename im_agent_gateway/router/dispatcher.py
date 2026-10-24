@@ -11,6 +11,7 @@ from ..agents.base import BaseAgent
 from ..agents.registry import AgentRegistry
 from ..config import Config
 from ..gateway.base import IMChannel, InboundEvent, InboundMessage
+from ..manage.commands import AgentOps
 from .jev_router import JevRouter
 from .keyword_router import KeywordRouter
 
@@ -182,9 +183,10 @@ class MessageRouter:
         aliases.update({a.name: a.name for a in self.registry.agents})
 
         # /agent on|off <名称>：运行时开关
+        # 经管理命令层统一处理（含 .env 写回），与 Web 管理端点、CLI 行为一致
         parts = arg.split(maxsplit=1)
         if parts and parts[0].lower() in ("on", "off") and len(parts) == 2:
-            err = self.registry.set_active(parts[1].strip(), parts[0].lower() == "on")
+            err = AgentOps.set_active(self.cfg, self.registry, parts[1].strip(), parts[0].lower() == "on")
             await msg.channel.send_text(msg, err or "已更新 Agent 开关状态")
             return
 
