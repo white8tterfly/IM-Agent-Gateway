@@ -60,22 +60,30 @@
     <pre id="log-body" class="log-pre">还没有日志内容</pre>
   </section>
 
-  <!-- 配置 -->
+  <!-- 配置：常用直接展示，高级项收进折叠区，未登记项只读展示 -->
   <section class="card">
     <h2>配置</h2>
-    <details>
-      <summary>展开查看当前生效的配置（敏感信息已隐藏）</summary>
-      <div id="config-body" class="kv"></div>
+    <div id="config-common"></div>
+    <details id="config-advanced-box" class="hidden">
+      <summary>高级设置（一般不用改）</summary>
+      <div id="config-advanced"></div>
+    </details>
+    <details id="config-unknown-box" class="hidden">
+      <summary>未登记配置（只读）</summary>
+      <div id="config-unknown"></div>
     </details>
   </section>
 
 </main>
 
+<!-- 保存成功提示（全局 toast） -->
+<div id="toast" class="toast hidden"></div>
+
 <script type="module">
   // 管理台页面逻辑：三态探测（在线 / 睡眠 / 离线）+ 各区块渲染 + 轮询刷新
   import {
     detectState, getStatus, getAgents, setAgentActive,
-    getTasks, getLogs, getConfig, wakeService,
+    getTasks, getLogs, getConfig, setConfig, wakeService,
   } from './js/api.js';
 
   const $ = (sel) => document.querySelector(sel);
@@ -254,11 +262,144 @@
     $('#log-body').textContent = data.lines.join('\n') || '还没有日志内容';
   }
 
+  // ---------- 配置区（常用平铺 + 高级折叠 + 行内编辑） ----------
+
+  // 正在行内编辑的配置键：编辑中暂停本区块轮询重建，防止输入框被刷掉
+  let cfgEditKey = null;
+  // 已保存待重启的新值（键 → 值）：轮询刷新时保持显示新值并带「待重启」角标
+  const cfgPending = new Map();
+
+  // 插值统一转义，配置值里出现的 HTML 字符不进标签层
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+
+  // 全局 toast：保存成功等轻提示，几秒后自动消失
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+  }
+
+  // 某项当前展示值：优先显示本会话已保存的新值，否则用后端返回的当前运行值
+  const cfgShown = (it) => (cfgPending.has(it.key) ? cfgPending.get(it.key) : it.value);
+
+  // 渲染单条配置行；editable=false 为未登记只读行（没有修改入口）
+  function cfgRow(it, editable) {
+    const row = document.createElement('div');
+    row.className = 'cfg-row';
+    const shown = cfgShown(it);
+    const pend = cfgPending.has(it.key);
+    const pendTag = pend ? '<span class="pend-badge">待重启</span>' : '';
+    if (editable && it.type === 'bool') {
+      // 开关项：与智能体开关同款滑块，点击即保存（值写 1 / 0）
+      row.innerHTML = `
+        <div class="info">
+          <div class="name">${esc(it.label)} ${pendTag}</div>
+          <div class="desc">${esc(it.desc)}</div>
+        </div>
+        <button class="toggle ${shown === '1' ? 'on' : ''}"
+                title="${shown === '1' ? '点击关闭' : '点击开启'}"><span class="knob"></span></button>`;
+      row.querySelector('.toggle').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const next = shown === '1' ? '0' : '1';
+        try {
+          const res = await setConfig(it.key, next);
+          if (res.ok) {
+            cfgPending.set(it.key, next);
+            toast('已保存，重启服务后生效');
+          } else {
+            alert(res.error || '保存没有成功，请稍后再试');
+          }
+        } catch (_) {
+          alert('连接服务失败，请稍后再试');
+        }
+        btn.disabled = false;
+        // 保存后立即重渲染反映新状态，不等下一轮轮询
+        renderConfig().catch(() => {});
+      });
+      return row;
+    }
+    // 文本项：当前值 + 修改按钮（只读行只展示值）
+    row.innerHTML = `
+      <div class="info">
+        <div class="name">${esc(it.label)} ${pendTag}</div>
+        <div class="desc">${esc(it.desc)}</div>
+      </div>
+      <div class="value" title="${esc(shown)}">${esc(shown)}</div>
+      ${editable ? '<button class="btn ghost small">修改</button>' : ''}`;
+    if (editable) {
+      row.querySelector('.btn').addEventListener('click', () => cfgStartEdit(row, it));
+    }
+    return row;
+  }
+
+  // 点「修改」：该行的值区域就地变成 输入框 + 保存 / 取消
+  function cfgStartEdit(row, it) {
+    cfgEditKey = it.key;
+    const shown = cfgShown(it);
+    const editBtn = row.querySelector('.btn'); // 行尾的「修改」按钮，稍后移除
+    const box = document.createElement('div');
+    box.className = 'cfg-edit';
+    // 敏感项不在输入框里回填 ******（避免误当成真实值提交）：留空保存 = 保持不变
+    box.innerHTML = `
+      <input type="text" placeholder="${it.sensitive ? '留空保持不变，填写新值则更换' : esc(shown)}">
+      <button class="btn small">保存</button>
+      <button class="btn ghost small">取消</button>`;
+    row.querySelector('.value').replaceWith(box);
+    editBtn.remove();
+    const input = box.querySelector('input');
+    input.focus();
+    // 结束编辑：恢复该区块渲染（cfgEditKey 复位后轮询也恢复正常）
+    const done = () => { cfgEditKey = null; renderConfig().catch(() => {}); };
+    box.querySelector('.btn:not(.ghost)').addEventListener('click', async () => {
+      const value = input.value.trim();
+      if (it.sensitive && !value) { done(); return; } // 敏感项留空 = 不修改
+      try {
+        const res = await setConfig(it.key, value);
+        if (!res.ok) {
+          // 保存失败：提示错误并保持编辑框打开，方便改了再存
+          alert(res.error || '保存没有成功，请稍后再试');
+          input.focus();
+          return;
+        }
+        cfgPending.set(it.key, value);
+        toast('已保存，重启服务后生效');
+      } catch (_) {
+        alert('连接服务失败，请稍后再试');
+        input.focus();
+        return;
+      }
+      done();
+    });
+    box.querySelector('.btn.ghost').addEventListener('click', done);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') box.querySelector('.btn:not(.ghost)').click();
+      if (e.key === 'Escape') done();
+    });
+  }
+
   async function renderConfig() {
+    // 正在编辑时不重建列表，防止输入框与已输入内容被轮询刷掉
+    if (cfgEditKey !== null) { return; }
     const cfg = await getConfig();
-    $('#config-body').innerHTML = Object.entries(cfg)
-      .map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`)
-      .join('');
+    const commonHost = $('#config-common');
+    commonHost.innerHTML = '';
+    cfg.common.forEach((it) => commonHost.appendChild(cfgRow(it, true)));
+    const advBox = $('#config-advanced-box');
+    advBox.classList.toggle('hidden', !cfg.advanced.length);
+    const advHost = $('#config-advanced');
+    advHost.innerHTML = '';
+    cfg.advanced.forEach((it) => advHost.appendChild(cfgRow(it, true)));
+    const unkBox = $('#config-unknown-box');
+    unkBox.classList.toggle('hidden', !cfg.unknown.length);
+    const unkHost = $('#config-unknown');
+    unkHost.innerHTML = '';
+    cfg.unknown.forEach((it) => unkHost.appendChild(cfgRow(it, false)));
   }
 
   async function refreshAll() {
