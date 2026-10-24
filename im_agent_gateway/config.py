@@ -88,6 +88,13 @@ class Config:
     service_cmd: str = "python main.py"  # 看门狗拉起服务所用命令
     wake_handoff_file: str = ".wake_pending.json"  # 唤醒消息交接文件（相对项目根）
 
+    # ---- Web 控制台（webui 通道）----
+    webui_enabled: bool = False    # webui 通道接入开关：开启时自动并入 CHANNELS 声明
+    webui_host: str = "127.0.0.1"  # HTTP 绑定地址（默认仅本机可达）
+    webui_port: int = 8790         # webui / 睡眠态托管共用端口
+    webui_user_id: str = "webui"   # 浏览器会话的 user_id（参与 ALLOWED_USERS 白名单校验）
+    webui_static: str = ""         # Web 静态目录；空 = 包内 webui 通道自带的 static/
+
     # ---- 配置文件位置 ----
     # 运行时开关写回目标：只指向项目目录的 .env，绝不指向上一级凭证文件
     env_file: Path = ENV_FILE
@@ -95,6 +102,24 @@ class Config:
     @property
     def qoder_cwd_resolved(self) -> Path:
         return Path(self.qoder_cwd).expanduser().resolve()
+
+    @property
+    def webui_static_resolved(self) -> Path:
+        """Web 静态目录：显式配置优先，默认用包内 webui 通道的 static/。"""
+        if self.webui_static:
+            return Path(self.webui_static).expanduser()
+        return Path(__file__).resolve().parent / "gateway" / "channels" / "webui" / "static"
+
+    def apply_webui_switch(self) -> None:
+        """把 WEBUI_ENABLED 开关收敛到 CHANNELS 声明：开 = 自动并入，关 = 从声明剔除。
+
+        避免只改开关或只改声明时出现行为歧义：最终接入与否只看这一处。
+        """
+        if self.webui_enabled:
+            if "webui" not in self.channels:
+                self.channels.append("webui")
+        else:
+            self.channels = [c for c in self.channels if c != "webui"]
 
     @property
     def wake_handoff_file_resolved(self) -> Path:
@@ -184,7 +209,15 @@ def load_config(env_file: Path | None = None) -> Config:
         wake_reply=_env("WAKE_REPLY") or "正在唤醒…",
         service_cmd=_env("SERVICE_CMD") or "python main.py",
         wake_handoff_file=_env("WAKE_HANDOFF_FILE") or ".wake_pending.json",
+        webui_enabled=_env("WEBUI_ENABLED").lower() in ("1", "true", "yes"),
+        webui_host=_env("WEBUI_HOST") or "127.0.0.1",
+        webui_port=int(_env("WEBUI_PORT") or 8790),
+        webui_user_id=_env("WEBUI_USER_ID") or "webui",
+        webui_static=_env("WEBUI_STATIC"),
     )
+
+    # webui 接入开关收敛到 CHANNELS 声明（放在必填校验前：关闭态不因残留声明误接入）
+    cfg.apply_webui_switch()
 
     # 默认 Agent 须在 AGENTS 声明中（注册制校验），不在则回退到声明列表第一个
     if cfg.default_agent not in cfg.agents:
