@@ -24,55 +24,105 @@
     <h1 id="overlay-title">服务正在休息</h1>
     <p id="overlay-text">服务暂时没有在运行，你可以把它叫醒。</p>
     <button id="wake-btn" class="btn big">点击唤醒</button>
-    <p id="overlay-tip" class="hidden" style="margin-top:18px; margin-bottom:0;">正在尝试叫醒服务，请稍等…</p>
+    <p id="overlay-tip" class="overlay-tip hidden">正在尝试叫醒服务，请稍等…</p>
   </div>
 </div>
 
 <main class="main">
 
-  <!-- 运行状态 -->
-  <section class="card">
-    <h2>运行状态</h2>
-    <div id="status-body" class="kv">
-      <span class="k">正在获取…</span>
-    </div>
-  </section>
+  <!-- 页签导航：概览 / 配置 / 运行日志（日志放最后，属于排查时才看的内容） -->
+  <nav class="tabs" role="tablist">
+    <button class="tab current" data-tab="overview" role="tab">概览</button>
+    <button class="tab" data-tab="config" role="tab">配置</button>
+    <button class="tab" data-tab="logs" role="tab">运行日志</button>
+  </nav>
 
-  <!-- Agent 服务开关 -->
-  <section class="card">
-    <h2>智能体服务 <span id="agent-count" class="count"></span></h2>
-    <div id="agent-list"></div>
-  </section>
+  <!-- 概览页签：运行状态 + 智能体 + 任务 -->
+  <div class="tab-panel" data-panel="overview">
+    <!-- 运行状态 -->
+    <section class="card">
+      <h2>运行状态</h2>
+      <div id="status-body">
+        <p class="empty-note">正在获取…</p>
+      </div>
+    </section>
 
-  <!-- 任务 -->
-  <section class="card">
-    <h2>任务 <span id="task-count" class="count"></span></h2>
-    <div id="task-list" class="task-list"><div>正在获取…</div></div>
-  </section>
+    <!-- Agent 服务开关 -->
+    <section class="card">
+      <h2>智能体服务 <span id="agent-count" class="count"></span></h2>
+      <div id="agent-list"></div>
+    </section>
 
-  <!-- 日志 -->
-  <section class="card">
-    <h2>
-      运行日志
-      <span class="spacer" style="flex:1"></span>
-      <button id="log-refresh" class="btn ghost">刷新</button>
-    </h2>
-    <pre id="log-body" class="log-pre">还没有日志内容</pre>
-  </section>
+    <!-- 任务 -->
+    <section class="card">
+      <h2>任务 <span id="task-count" class="count"></span></h2>
+      <div id="task-list" class="task-list"><p class="empty-note">正在获取…</p></div>
+    </section>
+  </div>
 
-  <!-- 配置：常用直接展示，高级项收进折叠区，未登记项只读展示 -->
-  <section class="card">
-    <h2>配置</h2>
-    <div id="config-common"></div>
-    <details id="config-advanced-box" class="hidden">
-      <summary>高级设置（一般不用改）</summary>
-      <div id="config-advanced"></div>
-    </details>
-    <details id="config-unknown-box" class="hidden">
-      <summary>未登记配置（只读）</summary>
-      <div id="config-unknown"></div>
-    </details>
-  </section>
+  <!-- 配置页签：左侧分组导航 + 右侧清单（搜索、筛选、行内编辑） -->
+  <div class="tab-panel hidden" data-panel="config">
+    <aside class="config-rail" aria-label="配置分组导航">
+      <p class="rail-title">配置分组</p>
+      <nav id="config-nav" class="rail-nav"></nav>
+      <p id="config-rail-summary" class="rail-summary"></p>
+    </aside>
+
+    <section class="card config-card">
+      <div class="config-head">
+        <h2>配置</h2>
+        <p class="config-sub">保存后写回本机 .env；只有真的改了某项、且该项需要重启时，才会在行内标出。</p>
+      </div>
+
+      <div class="config-toolbar">
+        <label class="config-search">
+          <input id="config-search" type="search" placeholder="搜索名称、说明、键名或当前值"
+                 autocomplete="off" spellcheck="false">
+        </label>
+        <div id="config-filters" class="config-filters" role="group" aria-label="按类型筛选">
+          <button type="button" class="chip current" data-filter="all">全部</button>
+          <button type="button" class="chip" data-filter="hot">即时生效</button>
+          <button type="button" class="chip" data-filter="cold">重启后生效</button>
+          <button type="button" class="chip" data-filter="bool">开关项</button>
+        </div>
+        <p id="config-count" class="config-count"></p>
+      </div>
+
+      <div id="config-list"></div>
+
+      <div id="config-empty" class="config-empty hidden">
+        <p>没有找到匹配的配置</p>
+        <button type="button" id="config-clear" class="btn ghost small">清空筛选</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- 运行日志页签：工具栏（过滤 / 行数 / 自动刷新 / 复制 / 刷新）+ 带行号的日志 -->
+  <div class="tab-panel hidden" data-panel="logs">
+    <section class="card log-card">
+      <div class="log-head">
+        <h2>运行日志 <span id="log-meta" class="count"></span></h2>
+        <div class="log-tools">
+          <label class="log-search">
+            <input id="log-filter" type="search" placeholder="过滤关键字" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="log-picker">
+            <span>行数</span>
+            <select id="log-lines">
+              <option value="200">200</option>
+              <option value="500">500</option>
+              <option value="1000">1000</option>
+            </select>
+          </label>
+          <button type="button" id="log-auto" class="chip current">自动刷新</button>
+          <button type="button" id="log-copy" class="btn ghost small">复制</button>
+          <button type="button" id="log-refresh" class="btn ghost small">刷新</button>
+        </div>
+      </div>
+      <div id="log-body" class="log-pre"><p class="empty-note">还没有日志内容</p></div>
+      <p id="log-empty" class="log-empty hidden">没有匹配的日志行</p>
+    </section>
+  </div>
 
 </main>
 
@@ -94,6 +144,36 @@
   const overlayText = $('#overlay-text');
   const wakeBtn = $('#wake-btn');
   const overlayTip = $('#overlay-tip');
+
+  // ---------- 页签切换 ----------
+  // 当前激活的页签：overview=概览，logs=运行日志，config=配置
+  let currentTab = 'overview';
+  // 各页签对应的渲染函数列表：轮询时只刷新当前可见页签，避免不必要的接口请求
+  const TAB_RENDERERS = {
+    overview: [renderStatus, renderAgents, renderTasks],
+    logs: [renderLogs],
+    config: [renderConfig],
+  };
+
+  function switchTab(name) {
+    if (name === currentTab) return;
+    currentTab = name;
+    // 切换页签按钮高亮
+    document.querySelectorAll('.tab').forEach((t) =>
+      t.classList.toggle('current', t.dataset.tab === name));
+    // 切换面板显示
+    document.querySelectorAll('.tab-panel').forEach((p) =>
+      p.classList.toggle('hidden', p.dataset.panel !== name));
+    // 切到目标页签时立即拉取一次最新数据
+    const renders = TAB_RENDERERS[name] || [];
+    for (const job of renders) {
+      try { job().catch(() => {}); } catch (_) {}
+    }
+  }
+
+  document.querySelectorAll('.tab').forEach((t) => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
 
   // ---------- 三态控制 ----------
 
@@ -175,32 +255,49 @@
   const dataHash = (x) => { try { return JSON.stringify(x); } catch { return String(x); } };
   let lastStatusSig = '', lastAgentsSig = '', lastTasksSig = '', lastLogsSig = '', lastConfigSig = '';
 
-  function fmtIdle(row) {
+  // 空闲自动休息提示：只在开启自动休息时出现，不常驻占版面
+  function idleNote(row) {
     const idle = row.idle;
-    if (!idle || !idle.exit_enabled) {
-      return '';
-    }
+    if (!idle || !idle.exit_enabled) return '';
     const remain = Math.max(0, idle.idle_min * 60 - idle.idle_sec);
     const min = Math.floor(remain / 60);
-    if (min >= 1) {
-      return `<span class="k">休息倒计时</span><span>大约 ${min} 分钟后自动休息</span>`;
-    }
-    return `<span class="k">休息倒计时</span><span>即将自动休息（收到新消息会重新计时）</span>`;
+    const text = min >= 1
+      ? `大约 ${min} 分钟后自动休息`
+      : '即将自动休息（收到新消息会重新计时）';
+    return `<p class="idle-note"><span class="idle-dot"></span>${text}</p>`;
   }
 
+  // 运行状态：三块指标先给结论，再用通道徽章给出细节
   async function renderStatus() {
     const st = await getStatus();
     const sig = dataHash(st);
     if (sig === lastStatusSig) return;
     lastStatusSig = sig;
-    const channels = st.channels.map((c) =>
-      `${c.name}（${c.connected ? '已连接' : '未连接'}）`).join('、') || '无';
-    $('#status-body').innerHTML = [
-      '<span class="k">运行状态</span><span>正常运行</span>',
-      `<span class="k">消息通道</span><span>${channels}</span>`,
-      `<span class="k">智能体</span><span>共 ${st.agents.total} 个，已开启 ${st.agents.active} 个</span>`,
-      fmtIdle(st),
-    ].filter(Boolean).join('');
+    const online = st.channels.filter((c) => c.connected).length;
+    const channelHtml = st.channels.length
+      ? `<div class="channel-list">${st.channels.map((c) => `
+            <span class="chan ${c.connected ? 'on' : 'off'}">
+              <span class="chan-name">${esc(c.name)}</span>
+              <span class="chan-state">${c.connected ? '已连接' : '未连接'}</span>
+            </span>`).join('')}</div>`
+      : '<p class="empty-note">还没有接入消息通道</p>';
+    $('#status-body').innerHTML = `
+      <div class="metric-row">
+        <div class="metric">
+          <span class="metric-label">运行状态</span>
+          <span class="metric-value ok"><span class="live-dot"></span>正常运行</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">消息通道</span>
+          <span class="metric-value">${online}<span class="metric-sub"> / ${st.channels.length} 已连接</span></span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">智能体</span>
+          <span class="metric-value">${st.agents.active}<span class="metric-sub"> / ${st.agents.total} 已开启</span></span>
+        </div>
+      </div>
+      ${channelHtml}
+      ${idleNote(st)}`;
   }
 
   async function renderAgents() {
@@ -212,7 +309,7 @@
     const host = $('#agent-list');
     host.innerHTML = '';
     if (!agents.length) {
-      host.innerHTML = '<div class="agent-row"><div class="desc">还没有接入任何智能体</div></div>';
+      host.innerHTML = '<p class="empty-note">还没有接入任何智能体</p>';
       return;
     }
     // 用途与档位的通俗展示名（与后端 kind / complexity 配置对应）
@@ -222,12 +319,17 @@
       const row = document.createElement('div');
       row.className = 'agent-row';
       const disabled = a.active && !a.available;
-      const levelText = a.complexity ? `，档位：${LEVEL_CN[a.complexity] || a.complexity}` : '';
+      const kind = KIND_CN[a.kind] || a.kind || '未设置';
+      const level = a.complexity ? (LEVEL_CN[a.complexity] || a.complexity) : '';
+      // 用途与档位改成名称后的标签，扫一眼就能对比，不再占一行说明
       row.innerHTML = `
         <div class="info">
-          <div class="name">${a.label}</div>
-          <div class="desc">${a.routing_hint}</div>
-          <div class="desc">用途：${KIND_CN[a.kind] || a.kind || '未设置'}${levelText}</div>
+          <div class="name">
+            ${esc(a.label)}
+            <span class="tag">${esc(kind)}</span>
+            ${level ? `<span class="tag muted">${esc(level)}</span>` : ''}
+          </div>
+          <div class="desc">${esc(a.routing_hint)}</div>
           ${!a.available ? '<div class="state-note">暂不可用：缺少配置或未安装</div>' : ''}
         </div>
         <button class="toggle ${a.active ? 'on' : ''}" ${disabled ? 'disabled' : ''}
@@ -261,34 +363,150 @@
     $('#task-count').textContent = `${data.inflight} 个进行中`;
     const host = $('#task-list');
     if (!data.recent.length) {
-      host.innerHTML = '<div>最近没有任务记录</div>';
+      host.innerHTML = '<p class="empty-note">最近还没有任务记录，这里只保留本次运行期间的任务</p>';
       return;
     }
-    host.innerHTML = data.recent.map((t) => `
-      <div class="task-item">
-        <span class="${t.ok ? 'ok' : 'fail'}">${t.ok ? '完成' : '失败'}</span>
-        <span>${t.label}</span>
-        <span>来源：${t.im}</span>
-        ${t.model ? `<span>模型：${t.model}</span>` : ''}
-        <span>用时：${t.elapsed_sec} 秒</span>
-        ${t.usage ? `<span>${t.usage}</span>` : ''}
+    // 任务行：状态、任务名、来源与耗时等信息各占一列，左对齐扫读、右侧补细节
+    host.innerHTML = data.recent.map((t) => {
+      const meta = [t.im, t.model, `${t.elapsed_sec} 秒`, t.usage]
+        .filter(Boolean).map(esc).join(' · ');
+      return `
+        <div class="task-item">
+          <span class="task-state ${t.ok ? 'ok' : 'fail'}">${t.ok ? '完成' : '失败'}</span>
+          <span class="task-label" title="${esc(t.label)}">${esc(t.label)}</span>
+          <span class="task-meta">${meta}</span>
+        </div>`;
+    }).join('');
+  }
+
+  // ---------- 运行日志（行号、级别着色、关键字过滤、自动刷新） ----------
+
+  // 日志视图状态：拉取行数、过滤关键字、是否跟随自动刷新
+  let logLines = 200;
+  let logKeyword = '';
+  let logAuto = true;
+  let logRaw = [];
+
+  // 按级别给日志行着色：错误优先，其次警告与调试
+  function logLevel(line) {
+    if (/(^|\s)(ERROR|CRITICAL|FATAL)(\s|:)/.test(line)) return 'error';
+    if (/(^|\s)(WARNING|WARN)(\s|:)/.test(line)) return 'warn';
+    if (/(^|\s)(DEBUG)(\s|:)/.test(line)) return 'debug';
+    return '';
+  }
+
+  // 用缓存渲染日志视图：过滤在本地完成，改关键字或行宽不需重新请求
+  function renderLogView() {
+    const kw = logKeyword.toLowerCase();
+    const rows = logRaw
+      .map((line, i) => ({ line, no: i + 1 }))
+      .filter((r) => !kw || r.line.toLowerCase().includes(kw));
+    const body = $('#log-body');
+    // 有日志但没有命中：收起深色日志块，只留一行浅色提示，避免出现空的深色条
+    const noMatch = logRaw.length > 0 && rows.length === 0;
+    body.classList.toggle('hidden', noMatch);
+    $('#log-empty').classList.toggle('hidden', !noMatch);
+    $('#log-meta').textContent = !logRaw.length
+      ? ''
+      : (kw ? `显示 ${rows.length} / ${logRaw.length} 行` : `最近 ${logRaw.length} 行`);
+    if (!logRaw.length) {
+      body.innerHTML = '<p class="empty-note">还没有日志内容</p>';
+      return;
+    }
+    if (noMatch) {
+      body.innerHTML = '';
+      return;
+    }
+    // 只有原本就贴着底部时才自动滚到最新，避免打断正在往上翻的阅读
+    const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    body.innerHTML = rows.map((r) => `
+      <div class="log-line ${logLevel(r.line)}">
+        <span class="log-no">${r.no}</span>
+        <span class="log-text">${esc(r.line)}</span>
       </div>`).join('');
+    if (nearBottom) body.scrollTop = body.scrollHeight;
   }
 
-  async function renderLogs() {
-    const data = await getLogs(200);
+  async function renderLogs(force = false) {
+    // 暂停自动刷新时，后台轮询不再重绘，避免读到一半被新日志顶走
+    if (!logAuto && !force) return;
+    const data = await getLogs(logLines);
     const sig = data.lines.join('\n');
-    if (sig === lastLogsSig) return;
+    if (!force && sig === lastLogsSig) return;
     lastLogsSig = sig;
-    $('#log-body').textContent = sig || '还没有日志内容';
+    logRaw = data.lines || [];
+    renderLogView();
   }
 
-  // ---------- 配置区（常用平铺 + 高级折叠 + 行内编辑） ----------
+  // ---------- 配置区（分组导航 + 搜索筛选 + 行内编辑） ----------
 
   // 正在行内编辑的配置键：编辑中暂停本区块轮询重建，防止输入框被刷掉
   let cfgEditKey = null;
   // 已保存待重启的新值（键 → 值）：轮询刷新时保持显示新值并带「待重启」角标
   const cfgPending = new Map();
+
+  // 界面分组：只决定配置在页面里的归类与顺序，接口仍按常用 / 高级返回
+  const CFG_GROUPS = [
+    {
+      id: 'agents', title: '智能体与选路',
+      desc: '智能体清单、用途分工、办公目录与自动选路方式',
+      keys: ['AGENTS', 'ENABLED_AGENTS', 'DEFAULT_AGENT', 'AUTO_ROUTE', 'JEV_ROUTE',
+        'AGENT_KINDS', 'AGENT_COMPLEXITY', 'COMPLEXITY_ROUTE', 'WORKBUDDY_CWD'],
+    },
+    {
+      id: 'usage', title: '使用与权限',
+      desc: '谁可以使用服务，以及启动时接入哪些消息通道',
+      keys: ['ALLOWED_USERS', 'CHANNELS'],
+    },
+    {
+      id: 'experience', title: '对话与运行',
+      desc: '唤醒回复、空闲自动休息与网页控制台开关',
+      keys: ['WAKE_REPLY', 'IDLE_EXIT', 'IDLE_EXIT_MIN', 'WEBUI_ENABLED'],
+    },
+    {
+      id: 'channels', title: '通道凭证', desc: '企业微信与飞书的接入凭证',
+      keys: ['BOT_ID', 'SECRET', 'WECOM_WS_URL', 'FEISHU_APP_ID', 'FEISHU_APP_SECRET'],
+      advanced: true,
+    },
+    {
+      id: 'jev', title: '选路模型（Jev）', desc: '自动选路依赖的决策模型与调用参数',
+      keys: ['MAKERS_MODELS_KEY', 'JEV_BASE_URL', 'JEV_MODEL', 'JEV_TIMEOUT_SEC', 'JEV_MIN_CONFIDENCE'],
+      advanced: true,
+    },
+    {
+      id: 'chat-agent', title: '对话智能体', desc: 'SiliconFlow 接口、模型与输出参数',
+      keys: ['API_KEY', 'SF_BASE_URL', 'SF_MODEL', 'SF_MAX_TOKENS', 'SF_TIMEOUT_SEC', 'SF_INCLUDE_REASONING'],
+      advanced: true,
+    },
+    {
+      id: 'office-agent', title: '办公智能体', desc: 'WorkBuddy 的命令行路径、模型、权限与超时',
+      keys: ['WORKBUDDY_BIN', 'WORKBUDDY_MODEL', 'WORKBUDDY_PERMISSION_MODE', 'WORKBUDDY_TIMEOUT_SEC'],
+      advanced: true,
+    },
+    {
+      id: 'coding-agent', title: '编码智能体（Qoder）', desc: '工作目录、模型、权限与超时',
+      keys: ['QODER_CWD', 'QODER_MODEL', 'QODER_PERMISSION_MODE', 'QODER_TIMEOUT_SEC',
+        'QODER_MAX_OUTPUT_TOKENS', 'QODER_BIN', 'QODERCN_PERSONAL_ACCESS_TOKEN'],
+      advanced: true,
+    },
+    {
+      id: 'stream', title: '消息流与日志', desc: '流式推送节奏、命名工作区与日志级别',
+      keys: ['WORKSPACES', 'STREAM_INTERVAL_SEC', 'STREAM_CHUNK_SIZE', 'HEARTBEAT_INTERVAL_SEC', 'LOG_LEVEL'],
+      advanced: true,
+    },
+    {
+      id: 'watchdog', title: '看门狗与控制台', desc: '唤醒值守、睡眠托管与控制台监听参数',
+      keys: ['WATCH_ENABLED', 'SERVICE_CMD', 'WAKE_HANDOFF_FILE', 'WATCH_HTTP_ENABLED',
+        'WEBUI_HOST', 'WEBUI_PORT', 'WEBUI_USER_ID', 'WEBUI_STATIC'],
+      advanced: true,
+    },
+  ];
+
+  // 当前筛选状态：查询词、类型筛选、高级区是否展开、左侧导航选中项
+  let cfgQuery = '';
+  let cfgFilter = 'all';
+  let cfgAdvancedOpen = false;
+  let cfgActiveNav = 'top';
 
   // 插值统一转义，配置值里出现的 HTML 字符不进标签层
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
@@ -308,35 +526,68 @@
   // 某项当前展示值：优先显示本会话已保存的新值，否则用后端返回的当前运行值
   const cfgShown = (it) => (cfgPending.has(it.key) ? cfgPending.get(it.key) : it.value);
 
+  // 当前筛选条件是否命中某项：搜索覆盖名称、说明、键名与当前值
+  function cfgMatches(it) {
+    if (cfgFilter === 'hot' && !it.hot) return false;
+    if (cfgFilter === 'cold' && it.hot) return false;
+    if (cfgFilter === 'bool' && it.type !== 'bool') return false;
+    if (!cfgQuery) return true;
+    const hay = `${it.label} ${it.desc} ${it.key} ${cfgShown(it)}`.toLowerCase();
+    return hay.includes(cfgQuery);
+  }
+
+  // 值的展示：空值说「未设置」，敏感项打码，短逗号清单拆成标签，其余单行省略
+  function cfgValueHtml(it) {
+    const shown = cfgShown(it);
+    if (!shown) return '<span class="cfg-empty">未设置</span>';
+    if (it.sensitive) return '<span class="cfg-mask">••••••••</span>';
+    const parts = shown.split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1 && parts.length <= 6 && shown.length <= 80) {
+      return `<span class="cfg-chips">${parts
+        .map((p) => `<span class="vchip">${esc(p)}</span>`).join('')}</span>`;
+    }
+    return `<span class="cfg-text" title="${esc(shown)}">${esc(shown)}</span>`;
+  }
+
   // 渲染单条配置行；editable=false 为未登记只读行（没有修改入口）
   function cfgRow(it, editable) {
     const row = document.createElement('div');
     row.className = 'cfg-row';
+    row.dataset.key = it.key;
     const shown = cfgShown(it);
-    const pend = cfgPending.has(it.key);
-    const pendTag = pend ? '<span class="pend-badge">待重启</span>' : '';
-    if (editable && it.type === 'bool') {
-      // 开关项：与智能体开关同款滑块，点击即保存（值写 1 / 0）
-      row.innerHTML = `
-        <div class="info">
-          <div class="name">${esc(it.label)} ${pendTag}</div>
-          <div class="desc">${esc(it.desc)}</div>
+    // 只有本次真的保存了不同的值才标「待重启」；未改动时行内不出现任何重启提示
+    const pendTag = cfgPending.has(it.key) ? '<span class="pend-badge">待重启</span>' : '';
+    const head = `
+      <div class="cfg-main">
+        <div class="cfg-label">
+          <span class="cfg-name">${esc(it.label)}</span>${pendTag}
         </div>
-        <button class="toggle ${shown === '1' ? 'on' : ''}"
-                title="${shown === '1' ? '点击关闭' : '点击开启'}"><span class="knob"></span></button>`;
-      row.querySelector('.toggle').addEventListener('click', async (e) => {
-        const btn = e.currentTarget;
+        <div class="cfg-desc">${esc(it.desc)}</div>
+      </div>`;
+
+    if (editable && it.type === 'bool') {
+      // 开关项：文字状态 + 滑块，点击即保存（值写 1 / 0）
+      row.innerHTML = `${head}
+        <div class="cfg-control">
+          <span class="cfg-state">${shown === '1' ? '已开启' : '已关闭'}</span>
+          <button type="button" class="toggle ${shown === '1' ? 'on' : ''}"
+                  title="${shown === '1' ? '点击关闭' : '点击开启'}"><span class="knob"></span></button>
+        </div>`;
+      const btn = row.querySelector('.toggle');
+      btn.addEventListener('click', async () => {
         btn.disabled = true;
         const next = shown === '1' ? '0' : '1';
         try {
           const res = await setConfig(it.key, next);
           if (res.ok) {
-            // 热生效项不进 cfgPending：直接刷新拉取新值，不显示「待重启」角标
+            // 热生效项直接刷新；冷生效项仅在值确实变化时记入待重启缓存
             if (res.hot) {
               toast('已生效');
-            } else {
+            } else if (next !== it.value) {
               cfgPending.set(it.key, next);
               toast('已保存，重启服务后生效');
+            } else {
+              toast('已保存');
             }
           } else {
             alert(res.error || '保存没有成功，请稍后再试');
@@ -345,106 +596,329 @@
           alert('连接服务失败，请稍后再试');
         }
         btn.disabled = false;
-        // 保存后立即重渲染反映新状态，不等下一轮轮询
-        renderConfig().catch(() => {});
+        renderConfig(true).catch(() => {});
       });
       return row;
     }
+
     // 文本项：当前值 + 修改按钮（只读行只展示值）
-    row.innerHTML = `
-      <div class="info">
-        <div class="name">${esc(it.label)} ${pendTag}</div>
-        <div class="desc">${esc(it.desc)}</div>
-      </div>
-      <div class="value" title="${esc(shown)}">${esc(shown)}</div>
-      ${editable ? '<button class="btn ghost small">修改</button>' : ''}`;
+    row.innerHTML = `${head}
+      <div class="cfg-control">
+        <div class="cfg-value">${cfgValueHtml(it)}</div>
+        ${editable ? '<button type="button" class="btn ghost small cfg-edit-btn">修改</button>' : ''}
+      </div>`;
     if (editable) {
-      row.querySelector('.btn').addEventListener('click', () => cfgStartEdit(row, it));
+      row.querySelector('.cfg-edit-btn').addEventListener('click', () => cfgStartEdit(row, it));
     }
     return row;
   }
 
-  // 点「修改」：该行的值区域就地变成 输入框 + 保存 / 取消
+  // 点「修改」：行下方展开通栏编辑区，保存失败时在输入框下方就地显示错误
   function cfgStartEdit(row, it) {
     cfgEditKey = it.key;
-    const shown = cfgShown(it);
-    const editBtn = row.querySelector('.btn'); // 行尾的「修改」按钮，稍后移除
+    row.classList.add('editing');
+    const editBtn = row.querySelector('.cfg-edit-btn');
+    if (editBtn) editBtn.disabled = true;
+
     const box = document.createElement('div');
-    box.className = 'cfg-edit';
+    box.className = 'cfg-editor';
     // 敏感项不在输入框里回填 ******（避免误当成真实值提交）：留空保存 = 保持不变
     box.innerHTML = `
-      <input type="text" placeholder="${it.sensitive ? '留空保持不变，填写新值则更换' : esc(shown)}">
-      <button class="btn small">保存</button>
-      <button class="btn ghost small">取消</button>`;
-    row.querySelector('.value').replaceWith(box);
-    editBtn.remove();
+      <div class="cfg-editor-field">
+        <input type="text" value="${it.sensitive ? '' : esc(cfgShown(it))}"
+               placeholder="${it.sensitive ? '留空保持不变，填写新值则更换' : '填写新的值'}"
+               autocomplete="off" spellcheck="false">
+        <p class="cfg-error hidden"></p>
+      </div>
+      <div class="cfg-editor-actions">
+        <button type="button" class="btn small">保存</button>
+        <button type="button" class="btn ghost small">取消</button>
+      </div>`;
+    row.appendChild(box);
+
     const input = box.querySelector('input');
+    const errBox = box.querySelector('.cfg-error');
+    const saveBtn = box.querySelector('.btn:not(.ghost)');
     input.focus();
-    // 结束编辑：恢复该区块渲染（cfgEditKey 复位后轮询也恢复正常）
-    const done = () => { cfgEditKey = null; renderConfig().catch(() => {}); };
-    box.querySelector('.btn:not(.ghost)').addEventListener('click', async () => {
+    if (!it.sensitive) input.select();
+
+    const showErr = (msg) => {
+      errBox.textContent = msg;
+      errBox.classList.remove('hidden');
+    };
+    // 结束编辑：复位状态并强制重建，避免轮询缓存导致编辑框残留
+    const done = () => {
+      cfgEditKey = null;
+      lastConfigSig = '';
+      renderConfig(true).catch(() => {});
+    };
+    const save = async () => {
       const value = input.value.trim();
       if (it.sensitive && !value) { done(); return; } // 敏感项留空 = 不修改
+      saveBtn.disabled = true;
       try {
         const res = await setConfig(it.key, value);
         if (!res.ok) {
-          // 保存失败：提示错误并保持编辑框打开，方便改了再存
-          alert(res.error || '保存没有成功，请稍后再试');
+          showErr(res.error || '保存没有成功，请稍后再试');
+          saveBtn.disabled = false;
           input.focus();
           return;
         }
         if (res.hot) {
           toast('已生效');
-        } else {
+        } else if (value !== it.value) {
           cfgPending.set(it.key, value);
           toast('已保存，重启服务后生效');
+        } else {
+          toast('已保存');
         }
       } catch (_) {
-        alert('连接服务失败，请稍后再试');
+        showErr('连接服务失败，请稍后再试');
+        saveBtn.disabled = false;
         input.focus();
         return;
       }
       done();
-    });
+    };
+
+    saveBtn.addEventListener('click', save);
     box.querySelector('.btn.ghost').addEventListener('click', done);
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') box.querySelector('.btn:not(.ghost)').click();
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
       if (e.key === 'Escape') done();
     });
   }
 
-  async function renderConfig() {
+  // 单个分组区块：标题 + 说明 + 行列表
+  function cfgSection(group, items) {
+    const sec = document.createElement('section');
+    sec.className = 'cfg-group';
+    sec.id = `cfg-group-${group.id}`;
+    const head = document.createElement('div');
+    head.className = 'cfg-group-head';
+    head.innerHTML = `
+      <h3>
+        <span>${esc(group.title)}</span>
+        ${group.advanced ? '<span class="cfg-tag adv">高级</span>' : ''}
+        <span class="cfg-group-count">${items.length} 项</span>
+      </h3>
+      <p class="cfg-group-desc">${esc(group.desc)}</p>`;
+    sec.appendChild(head);
+    items.forEach((it) => sec.appendChild(cfgRow(it, true)));
+    return sec;
+  }
+
+  // 左侧导航：全部 + 常用分组 + 高级分组，数字为各分组内的配置总数
+  function renderCfgNav(counts) {
+    const btn = (target, label, count) => `
+      <button type="button" data-target="${target}"
+              class="${target === cfgActiveNav ? 'current' : ''}">
+        <span>${esc(label)}</span><span class="count">${count}</span>
+      </button>`;
+    const parts = [btn('top', '全部配置', counts.total)];
+    CFG_GROUPS.filter((g) => !g.advanced)
+      .forEach((g) => parts.push(btn(g.id, g.title, counts.byGroup[g.id] || 0)));
+    parts.push('<p class="rail-label">高级设置</p>');
+    CFG_GROUPS.filter((g) => g.advanced)
+      .forEach((g) => parts.push(btn(g.id, g.title, counts.byGroup[g.id] || 0)));
+    $('#config-nav').innerHTML = parts.join('');
+  }
+
+  async function renderConfig(force = false) {
     // 正在编辑时不重建列表，防止输入框与已输入内容被轮询刷掉
     if (cfgEditKey !== null) { return; }
     const cfg = await getConfig();
-    // 指纹同时纳入待重启缓存：保存后即便后端值未变也要重绘以显示「待重启」角标
-    const sig = dataHash(cfg) + '|' + dataHash([...cfgPending.entries()]);
-    if (sig === lastConfigSig) return;
+    // 服务重启后配置已按新值生效：清掉与当前运行值一致的待重启标记，
+    // 避免用户没做任何改动、或改动已经生效时，页面仍提示需要重启
+    cfg.common.concat(cfg.advanced).forEach((it) => {
+      if (!it.sensitive && cfgPending.has(it.key) && cfgPending.get(it.key) === it.value) {
+        cfgPending.delete(it.key);
+      }
+    });
+    // 指纹纳入待重启缓存与筛选状态：值未变、筛选未变时不重建 DOM
+    const sig = dataHash(cfg) + '|' + dataHash([...cfgPending.entries()])
+      + '|' + cfgQuery + '|' + cfgFilter;
+    if (!force && sig === lastConfigSig) return;
     lastConfigSig = sig;
-    const commonHost = $('#config-common');
-    commonHost.innerHTML = '';
-    cfg.common.forEach((it) => commonHost.appendChild(cfgRow(it, true)));
-    const advBox = $('#config-advanced-box');
-    advBox.classList.toggle('hidden', !cfg.advanced.length);
-    const advHost = $('#config-advanced');
-    advHost.innerHTML = '';
-    cfg.advanced.forEach((it) => advHost.appendChild(cfgRow(it, true)));
-    const unkBox = $('#config-unknown-box');
-    unkBox.classList.toggle('hidden', !cfg.unknown.length);
-    const unkHost = $('#config-unknown');
-    unkHost.innerHTML = '';
-    cfg.unknown.forEach((it) => unkHost.appendChild(cfgRow(it, false)));
+
+    // 常用与高级按 key 合并，分组定义里直接按键名取用
+    const all = new Map();
+    cfg.common.forEach((it) => all.set(it.key, it));
+    cfg.advanced.forEach((it) => all.set(it.key, it));
+    const counts = { total: all.size, byGroup: {} };
+    CFG_GROUPS.forEach((g) => {
+      counts.byGroup[g.id] = g.keys.filter((k) => all.has(k)).length;
+    });
+
+    const host = $('#config-list');
+    host.innerHTML = '';
+    let visible = 0;
+
+    // 常用分组
+    CFG_GROUPS.filter((g) => !g.advanced).forEach((g) => {
+      const items = g.keys.map((k) => all.get(k)).filter(Boolean).filter(cfgMatches);
+      if (!items.length) return;
+      visible += items.length;
+      host.appendChild(cfgSection(g, items));
+    });
+
+    // 高级分组收进折叠区；搜索或筛选时自动展开，避免匹配项被藏起来
+    const advMatched = cfg.advanced.filter(cfgMatches).length;
+    if (cfg.advanced.length && (advMatched > 0 || (!cfgQuery && cfgFilter === 'all'))) {
+      const adv = document.createElement('details');
+      adv.className = 'cfg-advanced';
+      adv.id = 'config-advanced-box';
+      adv.open = cfgAdvancedOpen || !!cfgQuery || cfgFilter !== 'all';
+      const summary = document.createElement('summary');
+      summary.innerHTML = `高级设置 <span class="cfg-group-count">${advMatched} / ${cfg.advanced.length} 项</span>`;
+      adv.appendChild(summary);
+      CFG_GROUPS.filter((g) => g.advanced).forEach((g) => {
+        const items = g.keys.map((k) => all.get(k)).filter(Boolean).filter(cfgMatches);
+        if (!items.length) return;
+        visible += items.length;
+        adv.appendChild(cfgSection(g, items));
+      });
+      adv.addEventListener('toggle', () => {
+        // 只有用户主动开合时才记住偏好；筛选引起的展开不覆盖它
+        if (!cfgQuery && cfgFilter === 'all') cfgAdvancedOpen = adv.open;
+      });
+      host.appendChild(adv);
+    }
+
+    // 未登记字段：只读展示，仍可被搜索命中
+    const unkItems = (cfg.unknown || []).filter(cfgMatches);
+    if (unkItems.length && cfgFilter === 'all') {
+      const unk = document.createElement('details');
+      unk.className = 'cfg-advanced cfg-unknown-box';
+      unk.open = !!cfgQuery;
+      const summary = document.createElement('summary');
+      summary.innerHTML = `未登记配置（只读） <span class="cfg-group-count">${unkItems.length} 项</span>`;
+      unk.appendChild(summary);
+      unkItems.forEach((it) => unk.appendChild(cfgRow(it, false)));
+      host.appendChild(unk);
+    }
+
+    // 工具栏计数、左侧汇总与空状态
+    const filtering = !!cfgQuery || cfgFilter !== 'all';
+    // 没有待重启项时只说总数，不出现「待重启 0 项」这类多余提示
+    const pendNote = cfgPending.size ? ` · 待重启 ${cfgPending.size} 项` : '';
+    $('#config-count').textContent = filtering
+      ? `匹配 ${visible} 项`
+      : `共 ${counts.total} 项${pendNote}`;
+    $('#config-rail-summary').textContent =
+      `常用 ${cfg.common.length} 项 · 高级 ${cfg.advanced.length} 项`;
+    $('#config-empty').classList.toggle('hidden', visible > 0);
+    renderCfgNav(counts);
   }
 
+  // 左侧导航点击：滚动到分组；高级分组先展开再滚动
+  $('#config-nav').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-target]');
+    if (!btn) return;
+    cfgActiveNav = btn.dataset.target;
+    document.querySelectorAll('#config-nav [data-target]')
+      .forEach((b) => b.classList.toggle('current', b === btn));
+    if (cfgActiveNav === 'top') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    const group = CFG_GROUPS.find((g) => g.id === cfgActiveNav);
+    if (group && group.advanced && !cfgAdvancedOpen) {
+      cfgAdvancedOpen = true;
+      await renderConfig(true);
+    }
+    document.getElementById(`cfg-group-${cfgActiveNav}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // 搜索：输入停顿后再重绘，减少连续请求
+  let cfgSearchTimer = null;
+  $('#config-search').addEventListener('input', (e) => {
+    const value = e.target.value.trim().toLowerCase();
+    clearTimeout(cfgSearchTimer);
+    cfgSearchTimer = setTimeout(() => {
+      cfgQuery = value;
+      renderConfig(true).catch(() => {});
+    }, 180);
+  });
+
+  // 类型筛选：全部 / 即时生效 / 需重启 / 开关项
+  $('#config-filters').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-filter]');
+    if (!btn) return;
+    cfgFilter = btn.dataset.filter;
+    document.querySelectorAll('#config-filters .chip')
+      .forEach((b) => b.classList.toggle('current', b === btn));
+    renderConfig(true).catch(() => {});
+  });
+
+  // 空状态里的清空按钮：同时复位搜索词与筛选
+  $('#config-clear').addEventListener('click', () => {
+    cfgQuery = '';
+    cfgFilter = 'all';
+    $('#config-search').value = '';
+    document.querySelectorAll('#config-filters .chip')
+      .forEach((b) => b.classList.toggle('current', b.dataset.filter === 'all'));
+    renderConfig(true).catch(() => {});
+  });
+
   async function refreshAll() {
-    // 单个区块失败不拖垮整页刷新
-    const jobs = [renderStatus, renderAgents, renderTasks, renderLogs, renderConfig];
+    // 单个区块失败不拖垮整页刷新；只刷新当前可见页签的区块
+    const jobs = TAB_RENDERERS[currentTab] || [];
     for (const job of jobs) {
       try { await job(); } catch (_) { /* 等下一轮轮询重试 */ }
     }
   }
 
-  $('#log-refresh').addEventListener('click', () => renderLogs().catch(() => {}));
+  // ---------- 日志工具栏 ----------
+
+  // 行数切换：换一档行数后强制重新拉取（清掉指纹，避免被认为是同一批数据）
+  $('#log-lines').addEventListener('change', (e) => {
+    logLines = Number(e.target.value) || 200;
+    lastLogsSig = '';
+    renderLogs(true).catch(() => {});
+  });
+
+  // 关键字过滤：只过滤本地缓存，不重新请求；输入停顿后再重绘
+  let logFilterTimer = null;
+  $('#log-filter').addEventListener('input', (e) => {
+    const value = e.target.value.trim().toLowerCase();
+    clearTimeout(logFilterTimer);
+    logFilterTimer = setTimeout(() => {
+      logKeyword = value;
+      renderLogView();
+    }, 150);
+  });
+
+  // 自动刷新开关：暂停后轮询不再重绘，方便停在某一段慢慢看
+  $('#log-auto').addEventListener('click', () => {
+    logAuto = !logAuto;
+    const btn = $('#log-auto');
+    btn.classList.toggle('current', logAuto);
+    btn.textContent = logAuto ? '自动刷新' : '已暂停';
+    if (logAuto) {
+      lastLogsSig = '';
+      renderLogs(true).catch(() => {});
+    }
+  });
+
+  // 复制：把当前过滤后可见的日志行写入剪贴板
+  $('#log-copy').addEventListener('click', async () => {
+    const kw = logKeyword;
+    const rows = kw
+      ? logRaw.filter((line) => line.toLowerCase().includes(kw))
+      : logRaw;
+    if (!rows.length) { toast('没有可复制的日志'); return; }
+    try {
+      await navigator.clipboard.writeText(rows.join('\n'));
+      toast(`已复制 ${rows.length} 行日志`);
+    } catch (_) {
+      toast('复制失败，请手动选中日志内容');
+    }
+  });
+
+  // 手动刷新：忽略暂停状态，强制拉取最新日志
+  $('#log-refresh').addEventListener('click', () => renderLogs(true).catch(() => {}));
 
   // ---------- 启动 ----------
 
