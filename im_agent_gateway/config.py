@@ -88,6 +88,10 @@ class Config:
     service_cmd: str = "python main.py"  # 看门狗拉起服务所用命令
     wake_handoff_file: str = ".wake_pending.json"  # 唤醒消息交接文件（相对项目根）
 
+    # ---- 配置文件位置 ----
+    # 运行时开关写回目标：只指向项目目录的 .env，绝不指向上一级凭证文件
+    env_file: Path = ENV_FILE
+
     @property
     def qoder_cwd_resolved(self) -> Path:
         return Path(self.qoder_cwd).expanduser().resolve()
@@ -133,6 +137,8 @@ def load_config(env_file: Path | None = None) -> Config:
     cfg = Config(
         bot_id=_env("BOT_ID"),
         secret=_env("SECRET"),
+        # 写回目标与读取来源保持同一份文件（默认项目 .env）
+        env_file=ENV_FILE if env_file is None else Path(env_file),
         wecom_ws_url=_env("WECOM_WS_URL") or "wss://openws.work.weixin.qq.com",
         feishu_app_id=_env("FEISHU_APP_ID"),
         feishu_app_secret=_env("FEISHU_APP_SECRET"),

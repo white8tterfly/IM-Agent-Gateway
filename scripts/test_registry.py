@@ -1,6 +1,9 @@
 # 测试网关与 Agent 注册、运行时开关和消息路由（不依赖网络，用 FakeChannel/FakeAgent 模拟）
 import asyncio
+import atexit
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -169,6 +172,11 @@ async def main() -> None:
 
     # ===== 三、路由：registry 分发 / fallback / 运行时开关命令 =====
     cfg = load_config()
+    # /agent on|off 会写回 .env：测试期间指向临时文件，避免污染真实配置
+    fd, tmp_env = tempfile.mkstemp(suffix=".env")
+    os.close(fd)
+    cfg.env_file = Path(tmp_env)
+    atexit.register(lambda: Path(tmp_env).unlink(missing_ok=True))
     cfg.auto_route = True          # 固定路由行为，避免受 .env 影响
     cfg.allowed_users = set()      # 测试环境放开白名单
     cfg.jev_route = False          # 本测试不依赖网络：关闭 Jev 决策，走关键词降级
