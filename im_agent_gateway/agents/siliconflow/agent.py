@@ -60,10 +60,23 @@ class SiliconFlowAgent(BaseAgent):
         self._chats: dict[str, _ChatState] = {}
         self._active: set[str] = set()
         self._workers: set[asyncio.Task] = set()
-        self._client = httpx.AsyncClient(
+        self._client = self._build_client()
+
+    def _build_client(self) -> httpx.AsyncClient:
+        """按当前 cfg 构造 httpx 客户端（base_url / timeout 可热更新）。"""
+        return httpx.AsyncClient(
             base_url=self.cfg.sf_base_url,
             timeout=httpx.Timeout(connect=15.0, read=self.cfg.sf_timeout_sec, write=30.0, pool=15.0),
         )
+
+    async def apply_config(self) -> None:
+        """cfg 变更后重建客户端（SF_BASE_URL / SF_TIMEOUT_SEC 热生效）。"""
+        old = self._client
+        self._client = self._build_client()
+        try:
+            await old.aclose()
+        except Exception:
+            logger.exception("关闭旧 SiliconFlow 客户端异常")
 
     @property
     def available(self) -> bool:

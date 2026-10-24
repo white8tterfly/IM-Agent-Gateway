@@ -136,6 +136,12 @@ class BaseAgent(ABC):
     async def close(self) -> None:
         """释放资源（默认无操作）。"""
 
+    async def apply_config(self) -> None:
+        """配置热更新钩子：cfg 字段变更后重建需重新构造的资源（如 httpx client）。
+
+        默认无操作；仅持有长连接 / 构造期固化资源的 Agent 需要覆写。
+        """
+
     # ---------- 指令（Agent 系统自带的命令，框架只负责分发） ----------
 
     def commands(self) -> list[CommandSpec]:

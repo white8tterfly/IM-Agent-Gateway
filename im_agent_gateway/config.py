@@ -193,6 +193,77 @@ def _parse_workspaces(raw: str) -> dict[str, Path]:
     return out
 
 
+# 可热生效配置的解析器：.env 键 -> (Config 字段名, 解析函数)
+# 写回 .env 后立即把解析值写回 cfg 对象，使用方每次读取 cfg 即生效。
+# 未在此表中的配置项需重启服务（涉及对象创建 / 长连接 / 进程级资源）。
+HOT_PARSERS: dict[str, tuple[str, "object"]] = {
+    # 路由与用途
+    "AUTO_ROUTE": ("auto_route", lambda v: v.lower() not in ("0", "false", "no")),
+    "JEV_ROUTE": ("jev_route", lambda v: v.lower() not in ("0", "false", "no")),
+    "MAKERS_MODELS_KEY": ("jev_api_key", lambda v: v),
+    "JEV_MODEL": ("jev_model", lambda v: v or "@makers/jev"),
+    "JEV_MIN_CONFIDENCE": ("jev_min_confidence", lambda v: float(v or 0.5)),
+    "COMPLEXITY_ROUTE": ("complexity_route", lambda v: v.lower() in ("1", "true", "yes")),
+    "DEFAULT_AGENT": ("default_agent", lambda v: v.lower() or "siliconflow"),
+    "AGENT_KINDS": ("agent_kinds", lambda v: _parse_agent_map(v, VALID_AGENT_KINDS, "AGENT_KINDS")),
+    "AGENT_COMPLEXITY": ("agent_complexity", lambda v: _parse_agent_map(v, VALID_COMPLEXITY, "AGENT_COMPLEXITY")),
+    # 安全与休眠
+    "ALLOWED_USERS": ("allowed_users", lambda v: {u.strip() for u in v.split(",") if u.strip()}),
+    "IDLE_EXIT_MIN": ("idle_exit_min", lambda v: float(v or 10)),
+    # WAKE_REPLY 由看门狗独立进程读取，服务进程改 cfg 不影响，故不热生效
+    # WorkBuddy（cwd / model / permission / timeout 每次任务读 cfg）
+    "WORKBUDDY_CWD": ("workbuddy_cwd", lambda v: v or str(PROJECT_ROOT)),
+    "WORKBUDDY_MODEL": ("workbuddy_model", lambda v: v),
+    "WORKBUDDY_PERMISSION_MODE": ("workbuddy_permission_mode", lambda v: v or "acceptEdits"),
+    "WORKBUDDY_TIMEOUT_SEC": ("workbuddy_timeout_sec", lambda v: float(v or 1800)),
+    # Qoder
+    "QODER_CWD": ("qoder_cwd", lambda v: v or str(PROJECT_ROOT)),
+    "QODER_MODEL": ("qoder_model", lambda v: v),
+    "QODER_PERMISSION_MODE": ("qoder_permission_mode", lambda v: v or "accept_edits"),
+    "QODER_TIMEOUT_SEC": ("qoder_timeout_sec", lambda v: float(v or 1800)),
+    "QODER_MAX_OUTPUT_TOKENS": ("qoder_max_output_tokens", lambda v: int(v or 8000)),
+    "QODERCN_PERSONAL_ACCESS_TOKEN": ("qodercn_pat", lambda v: v),
+    # SiliconFlow（api_key 每次请求读；base_url / timeout 需重建 client，由 apply_config 处理）
+    "API_KEY": ("sf_api_key", lambda v: v),
+    "SF_MODEL": ("sf_model", lambda v: v or "deepseek-ai/DeepSeek-V4.1-Flash"),
+    "SF_MAX_TOKENS": ("sf_max_tokens", lambda v: int(v or 4096)),
+    "SF_INCLUDE_REASONING": ("sf_include_reasoning", lambda v: v.lower() in ("1", "true", "yes")),
+    # Jev 网关（base_url / timeout 需重建 client，由 JevRouter.reconfigure 处理）
+    "JEV_BASE_URL": ("jev_base_url", lambda v: (v or "https://ai-gateway.edgeone.link/v1").rstrip("/")),
+    "JEV_TIMEOUT_SEC": ("jev_timeout_sec", lambda v: float(v or 6)),
+    # SiliconFlow 网关（需重建 client）
+    "SF_BASE_URL": ("sf_base_url", lambda v: (v or "https://api.siliconflow.cn/v1").rstrip("/")),
+    "SF_TIMEOUT_SEC": ("sf_timeout_sec", lambda v: float(v or 300)),
+    # CLI 路径（available 每次读，改后新任务自动用新路径）
+    "QODER_BIN": ("qoder_bin", lambda v: v or "qoderclicn"),
+    "WORKBUDDY_BIN": ("workbuddy_bin", lambda v: v or "codebuddy"),
+    # 流式与日志
+    "STREAM_INTERVAL_SEC": ("stream_interval_sec", lambda v: float(v or 1.0)),
+    "STREAM_CHUNK_SIZE": ("stream_chunk_size", lambda v: int(v or 200)),
+    "LOG_LEVEL": ("log_level", lambda v: (v or "INFO").upper()),
+    # 工作区
+    "WORKSPACES": ("workspaces", lambda v: _parse_workspaces(v)),
+}
+
+
+def apply_hot_config(cfg: Config, key: str, value: str) -> bool:
+    """把单个 .env 键值热更新到 cfg 对象，返回是否支持热生效。
+
+    仅更新内存配置对象，不写磁盘（写盘由调用方负责）。解析口径与
+    load_config 保持一致；解析失败（如数字非数字）保留原值并返回 False。
+    """
+    entry = HOT_PARSERS.get(key.strip().upper())
+    if entry is None:
+        return False
+    field, parser = entry
+    try:
+        setattr(cfg, field, parser(value))
+    except (ValueError, TypeError):
+        logger.warning("配置 %s 热更新解析失败，保留原值：%r", key, value)
+        return False
+    return True
+
+
 def load_config(env_file: Path | None = None) -> Config:
     # 分层加载：先上一级凭证，再项目配置（不覆盖已有值）
     if PARENT_ENV_FILE.is_file():
