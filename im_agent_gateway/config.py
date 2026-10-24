@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 # 保密凭证文件（项目目录上一级的 .env），不入项目仓库
 PARENT_ENV_FILE = PROJECT_ROOT.parent / ".env"
+
+# Agent 用途合法值（AGENT_KINDS 的 value 白名单）
+VALID_AGENT_KINDS = ("chat", "coding", "office")
+# 复杂度档位合法值（AGENT_COMPLEXITY 的 value 白名单，固定三档）
+VALID_COMPLEXITY = ("simple", "mid", "complex")
 
 
 @dataclass
@@ -65,6 +73,14 @@ class Config:
     default_agent: str = "siliconflow"
     auto_route: bool = True
     enabled_agents: set[str] = field(default_factory=set)
+
+    # ---- Agent 用途与复杂度路由（两级路由：用途 → 档位） ----
+    # AGENT_KINDS：`名称=用途` 覆写映射，空 = 用各 Agent 类默认 kind
+    agent_kinds: dict[str, str] = field(default_factory=dict)
+    # AGENT_COMPLEXITY：`名称=档位` 映射（simple/mid/complex），空 = 不参与档位选择
+    agent_complexity: dict[str, str] = field(default_factory=dict)
+    # COMPLEXITY_ROUTE：同用途多 Agent 时是否由 Jev 按问题复杂度选择
+    complexity_route: bool = False
 
     # ---- 工作区（/ws 切换） ----
     workspaces: dict[str, Path] = field(default_factory=dict)
@@ -136,6 +152,29 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+def _parse_agent_map(raw: str, allowed: tuple[str, ...], field_label: str) -> dict[str, str]:
+    """解析 `名称=值` 逗号分隔映射（AGENT_KINDS / AGENT_COMPLEXITY 共用）。
+
+    值大小写不敏感（统一小写）；非法值与空项启动时告警并忽略，不影响其余项。
+    """
+    out: dict[str, str] = {}
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        name, _, value = item.partition("=")
+        name, value = name.strip(), value.strip().lower()
+        if not name or not value:
+            logger.warning("%s 含空项 %r，已忽略", field_label, item)
+            continue
+        if value not in allowed:
+            logger.warning("%s 中 %s=%s 非法（允许值：%s），已忽略",
+                           field_label, name, value, "/".join(allowed))
+            continue
+        out[name] = value
+    return out
+
+
 def _parse_workspaces(raw: str) -> dict[str, Path]:
     """解析 WORKSPACES 配置：`名称=路径;名称2=路径2`。"""
     out: dict[str, Path] = {}
@@ -198,6 +237,9 @@ def load_config(env_file: Path | None = None) -> Config:
         default_agent=(_env("DEFAULT_AGENT").lower() or "siliconflow"),
         auto_route=_env("AUTO_ROUTE").lower() not in ("0", "false", "no"),
         enabled_agents={a.strip().lower() for a in _env("ENABLED_AGENTS").split(",") if a.strip()},
+        agent_kinds=_parse_agent_map(_env("AGENT_KINDS"), VALID_AGENT_KINDS, "AGENT_KINDS"),
+        agent_complexity=_parse_agent_map(_env("AGENT_COMPLEXITY"), VALID_COMPLEXITY, "AGENT_COMPLEXITY"),
+        complexity_route=_env("COMPLEXITY_ROUTE").lower() in ("1", "true", "yes"),
         workspaces=_parse_workspaces(_env("WORKSPACES")),
         allowed_users={u.strip() for u in _env("ALLOWED_USERS").split(",") if u.strip()},
         stream_interval_sec=float(_env("STREAM_INTERVAL_SEC") or 1.0),

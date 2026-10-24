@@ -50,6 +50,22 @@ class AgentRegistry:
     def is_active(self, name: str) -> bool:
         return bool(self._active.get(name))
 
+    def apply_meta_overrides(
+        self, kinds: dict[str, str], complexity: dict[str, str]
+    ) -> None:
+        """按 .env 覆写已注册 Agent 的用途（kind）与复杂度档位（complexity）。
+
+        映射里出现未注册的名称时静默忽略——配置允许声明尚未接入的 Agent。
+        需在全部 Agent 注册完成后调用一次（main 装配处）。
+        """
+        for agent in self._agents.values():
+            if agent.name in kinds:
+                agent.kind = kinds[agent.name]
+            if agent.name in complexity:
+                agent.complexity = complexity[agent.name]
+            logger.debug("Agent %s 元数据：用途 %s，档位 %r",
+                         agent.name, agent.kind, agent.complexity or "未声明")
+
     def set_active(self, name: str, active: bool) -> str | None:
         """开启/关闭 Agent；成功返回 None，失败返回错误文案。"""
         agent = self._agents.get(name)

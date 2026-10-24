@@ -110,6 +110,8 @@ async def amain() -> None:
     for spec in cfg.agents:
         agent = load_agent(spec, cfg)
         registry.register(agent, active=cfg.agent_enabled(agent.name) and agent.available)
+    # 用途/档位覆写：全部注册完成后按 AGENT_KINDS / AGENT_COMPLEXITY 统一应用一次
+    registry.apply_meta_overrides(cfg.agent_kinds, cfg.agent_complexity)
     router = MessageRouter(cfg, registry)
 
     # IM 接入：按 .env 的 CHANNELS 声明加载，实现 IMChannel 并暴露 Channel 类即可接入
