@@ -24,19 +24,29 @@
     <h1 id="overlay-title">服务正在休息</h1>
     <p id="overlay-text">服务暂时没有在运行，你可以把它叫醒。</p>
     <button id="wake-btn" class="btn big">点击唤醒</button>
-    <p id="overlay-tip" class="hidden" style="margin-top:18px; margin-bottom:0;">正在尝试叫醒服务，请稍等…</p>
+    <p id="overlay-tip" class="overlay-tip hidden">正在尝试叫醒服务，请稍等…</p>
   </div>
 </div>
 
 <div class="chat-layout">
+  <!-- 会话栏：说明这里能做什么，并提供清空本页显示的入口 -->
+  <div class="chat-head">
+    <h1>对话</h1>
+    <p class="chat-sub">消息会交给已开启的智能体处理，输入 /help 查看可用指令</p>
+    <button id="clear-btn" type="button" class="btn ghost small">清空记录</button>
+  </div>
+
   <main id="chat-main" class="chat-main">
     <div class="bubble sys">正在连接服务…</div>
   </main>
 
-  <div class="chat-input">
-    <textarea id="chat-text" rows="1"
-              placeholder="输入消息，回车发送；Shift + 回车换行"></textarea>
-    <button id="send-btn" class="btn send-btn">发送</button>
+  <!-- 输入区：输入框与发送按钮同一个容器，聚焦时整体抬起 -->
+  <div class="chat-foot">
+    <div class="composer">
+      <textarea id="chat-text" rows="1" placeholder="输入消息…"></textarea>
+      <button id="send-btn" class="btn send-btn" type="button" disabled>发送</button>
+    </div>
+    <p class="composer-tip">Enter 发送 · Shift + Enter 换行</p>
   </div>
 </div>
 
@@ -58,13 +68,63 @@
 
   // ---------- 气泡渲染 ----------
 
-  function addBubble(kind, text = '') {
-    const el = document.createElement('div');
-    el.className = `bubble ${kind}`;
-    el.textContent = text;
-    chatMain.appendChild(el);
+  // 视口离底部很近时才自动跟随新内容，避免用户往上翻历史时被强行拉回底部
+  function atBottom() {
+    return chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 120;
+  }
+
+  function stickBottom() {
     chatMain.scrollTop = chatMain.scrollHeight;
-    return el;
+  }
+
+  // 时间戳：只取时分，保持消息头上的小字足够短
+  function timeNow() {
+    return new Date().toTimeString().slice(0, 5);
+  }
+
+  // 追加一条消息，返回气泡本体（流式帧靠它持续刷新文本）
+  // 结构：头像 + （名称·时间 + 气泡），系统提示单独用居中胶囊，不带头像
+  function addBubble(kind, text = '') {
+    const stick = kind === 'user' || atBottom();
+
+    if (kind === 'sys') {
+      const el = document.createElement('div');
+      el.className = 'bubble sys';
+      el.textContent = text;
+      chatMain.appendChild(el);
+      if (stick) stickBottom();
+      return el;
+    }
+
+    const isUser = kind === 'user';
+    const row = document.createElement('div');
+    row.className = `msg ${isUser ? 'user' : 'bot'}`;
+
+    const avatar = document.createElement('span');
+    avatar.className = 'avatar';
+    avatar.textContent = isUser ? '我' : 'AI';
+
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    const who = document.createElement('span');
+    who.textContent = isUser ? '我' : '助手';
+    const time = document.createElement('span');
+    time.className = 'time';
+    time.textContent = timeNow();
+    meta.append(who, time);
+
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${kind}`;
+    bubble.textContent = text;
+
+    body.append(meta, bubble);
+    row.append(avatar, body);
+    chatMain.appendChild(row);
+    if (stick) stickBottom();
+    return bubble;
   }
 
   // ---------- 流式帧聚合：同一 stream id 的帧刷新同一个气泡 ----------
@@ -82,6 +142,8 @@
       return;
     }
     if (frame.type === 'stream') {
+      // 先记录是否贴底，刷新文本后再决定要不要跟随，避免打断往上翻的阅读
+      const stick = atBottom();
       let el = streamBubbles.get(frame.id);
       if (!el) {
         el = addBubble('bot', '');
@@ -93,7 +155,7 @@
         el.classList.remove('streaming');  // 定格为普通回复样式
         streamBubbles.delete(frame.id);
       }
-      chatMain.scrollTop = chatMain.scrollHeight;
+      if (stick) stickBottom();
     }
   }
 
@@ -106,6 +168,11 @@
     }, 5000);
   }
 
+  // 发送按钮跟着输入内容启用/禁用，空输入时不给可点的假象
+  function updateSendState() {
+    sendBtn.disabled = !textInput.value.trim();
+  }
+
   function send() {
     const content = textInput.value.trim();
     if (!content) {
@@ -114,6 +181,7 @@
     addBubble('user', content);
     textInput.value = '';
     textInput.style.height = 'auto';
+    updateSendState();
     socket.send({ type: 'text', content });
     pendingHint();
   }
@@ -129,6 +197,18 @@
   textInput.addEventListener('input', () => {
     textInput.style.height = 'auto';
     textInput.style.height = Math.min(textInput.scrollHeight, 140) + 'px';
+    updateSendState();
+  });
+
+  // 清空本页显示：只清浏览器里的气泡，服务端会话上下文不受影响
+  $('#clear-btn').addEventListener('click', () => {
+    chatMain.innerHTML = '';
+    streamBubbles.clear();
+    if (noReplyTimer) {
+      clearTimeout(noReplyTimer);
+      noReplyTimer = null;
+    }
+    addBubble('sys', '已清空本页显示，服务端会话上下文不受影响');
   });
 
   // ---------- 睡眠 / 离线遮罩 ----------
@@ -182,6 +262,8 @@
   // ---------- 连接状态 ----------
 
   let welcomed = false;  // 欢迎语只插一次，重连回来不刷屏
+  let wasOnline = false; // 记录上一次是否在线，用于断开时补一条提示
+  const bootHint = chatMain.querySelector('.bubble.sys');  // 首屏的「正在连接服务…」
   const socket = createChatSocket({
     onFrame,
     onState(state) {
@@ -191,11 +273,19 @@
         overlay.classList.add('hidden');
         if (!welcomed) {
           welcomed = true;
+          bootHint?.remove();  // 连上后把「正在连接服务…」换成欢迎语，避免两条系统提示叠在一起
           addBubble('sys', '已连接，可以直接发消息，也可以发送指令（/help 查看全部指令）');
+        } else if (!wasOnline) {
+          addBubble('sys', '连接已恢复，可以继续发送消息');
         }
+        wasOnline = true;
       } else {
         stateBadge.className = 'badge offline';
         stateBadge.textContent = '连接已断开';
+        if (wasOnline) {
+          addBubble('sys', '连接已断开，正在自动重连…');
+          wasOnline = false;
+        }
         probeService();  // 断开时探测：睡着给一键唤醒，彻底没起给启动提示
       }
     },
