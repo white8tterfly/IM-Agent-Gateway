@@ -52,10 +52,11 @@ def config_grouped_view(cfg: Config, meta: list | None = None) -> dict:
     """分组配置视图：/api/config 端点与 CLI config show 共用同一口径。
 
     按元数据表分成常用 / 高级两组，每项带通俗名称与说明、当前运行值
-    （敏感项非空显示 ******）；漏登记的 Config 字段自动落 unknown 组
-    只读展示（desc 为暂无说明），避免新增配置凭空消失。
+    （敏感项非空显示 ******）、是否支持热生效（hot）；漏登记的 Config
+    字段自动落 unknown 组只读展示（desc 为暂无说明），避免新增配置凭空消失。
     meta 参数供测试传入截断的登记表验证 unknown 归类。
     """
+    from ..config import HOT_PARSERS
     from .config_meta import CONFIG_META
     items = CONFIG_META if meta is None else meta
 
@@ -66,9 +67,12 @@ def config_grouped_view(cfg: Config, meta: list | None = None) -> dict:
         declared.add(it.field)
         val = getattr(cfg, it.field, None)
         shown = "******" if (it.sensitive and val) else _format_config_value(it.field, val)
+        # 是否支持即时生效：键在 HOT_PARSERS 中 = 改完写回内存立即生效；否则需重启
+        hot = it.key in HOT_PARSERS
         row = {
             "key": it.key, "field": it.field, "label": it.label, "desc": it.desc,
             "sensitive": it.sensitive, "type": it.type, "value": shown,
+            "hot": hot,
         }
         (common if not it.advanced else advanced).append(row)
 
@@ -83,6 +87,7 @@ def config_grouped_view(cfg: Config, meta: list | None = None) -> dict:
             "key": f.name.upper(), "field": f.name, "label": f.name,
             "desc": "（暂无说明）", "sensitive": sensitive, "type": "text",
             "value": shown,
+            "hot": f.name.upper() in HOT_PARSERS,
         })
     return {"common": common, "advanced": advanced, "unknown": unknown}
 

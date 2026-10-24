@@ -87,7 +87,8 @@ CONFIG_META: list[ConfigItem] = [
     # ---------- 高级设置：通道凭证与细节 ----------
     ConfigItem(
         "CHANNELS", "channels", "接入哪些消息通道",
-        "服务启动加载哪些 IM 通道，用英文逗号隔开：wecom 企业微信、feishu 飞书"),
+        "服务启动加载哪些 IM 通道，用英文逗号隔开：wecom 企业微信、feishu 飞书",
+        advanced=False),
     ConfigItem(
         "BOT_ID", "bot_id", "企微机器人 ID",
         "企业微信智能机器人的 Bot ID，企微通道登录用；不接企微可留空"),
