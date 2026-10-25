@@ -204,7 +204,7 @@
   function showOffline() {
     setBadge('offline');
     overlayTitle.textContent = '服务没有启动';
-    overlayText.textContent = '既没有查到运行中的服务，也没有找到值守的看门狗。请先在电脑上启动服务，再刷新本页。';
+    overlayText.textContent = '既没有查到运行中的服务，也没有找到后台待命程序。请先在电脑上启动服务，再刷新本页。';
     wakeBtn.classList.add('hidden');
     overlay.classList.remove('hidden');
   }
@@ -495,7 +495,7 @@
       advanced: true,
     },
     {
-      id: 'watchdog', title: '看门狗与控制台', desc: '唤醒值守、睡眠托管与控制台监听参数',
+      id: 'watchdog', title: '后台待命与控制台', desc: '消息唤醒、休息时托管与服务监听参数',
       keys: ['WATCH_ENABLED', 'SERVICE_CMD', 'WAKE_HANDOFF_FILE', 'WATCH_HTTP_ENABLED',
         'WEBUI_HOST', 'WEBUI_PORT', 'WEBUI_USER_ID', 'WEBUI_STATIC'],
       advanced: true,
