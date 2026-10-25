@@ -24,19 +24,23 @@ LOG_DIR = Path(__file__).parent / "logs"
 
 def setup_logging(level: str) -> None:
     LOG_DIR.mkdir(exist_ok=True)
-    # Windows 控制台可能是 GBK 编码，避免日志中的特殊字符导致崩溃
+    # Windows 控制台可能是 GBK 编码，避免日志中的特殊字符导致崩溃；
+    # 无控制台运行（如计划任务用 pythonw 启动看门狗）时 stdout/stderr 为 None，跳过控制台流
     for stream in (sys.stdout, sys.stderr):
+        if stream is None:
+            continue
         try:
             stream.reconfigure(errors="replace")
         except (AttributeError, ValueError):
             pass
+    handlers: list[logging.Handler] = []
+    if sys.stdout is not None:
+        handlers.append(logging.StreamHandler(sys.stdout))
+    handlers.append(logging.FileHandler(LOG_DIR / "im_agent_gateway.log", encoding="utf-8"))
     logging.basicConfig(
         level=getattr(logging, level, logging.INFO),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(LOG_DIR / "im_agent_gateway.log", encoding="utf-8"),
-        ],
+        handlers=handlers,
     )
 
 

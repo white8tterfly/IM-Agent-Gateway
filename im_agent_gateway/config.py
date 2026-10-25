@@ -98,6 +98,9 @@ class Config:
 
     # ---- 看门狗 / 消息唤醒 ----
     watch_enabled: bool = False      # 看门狗总开关：服务不自动起，由看门狗监听并唤醒
+    # 开机自动启动看门狗：0=登录后计划任务拉起的看门狗读配置即退出，1=正常监听。
+    # 只影响「下次开机是否拉起」，不改变本次已在运行的看门狗。
+    watch_autostart: bool = True
     idle_exit: bool = False          # 服务空闲自动退开关：1=空闲超时退出，0=常驻
     idle_exit_min: float = 10.0      # 空闲判定分钟数（仅 idle_exit=True 生效）
     wake_reply: str = "正在唤醒…"    # 看门狗唤醒前的占位回复文案
@@ -318,6 +321,8 @@ def load_config(env_file: Path | None = None) -> Config:
         heartbeat_interval_sec=float(_env("HEARTBEAT_INTERVAL_SEC") or 30.0),
         log_level=(_env("LOG_LEVEL") or "INFO").upper(),
         watch_enabled=_env("WATCH_ENABLED").lower() in ("1", "true", "yes"),
+        # 留空按开启处理：老 .env 没有这一项时保持「登录即启动」的原有行为
+        watch_autostart=_env("WATCH_AUTOSTART").lower() not in ("0", "false", "no"),
         idle_exit=_env("IDLE_EXIT").lower() in ("1", "true", "yes"),
         idle_exit_min=float(_env("IDLE_EXIT_MIN") or 10),
         wake_reply=_env("WAKE_REPLY") or "正在唤醒…",

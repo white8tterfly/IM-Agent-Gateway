@@ -2,7 +2,9 @@
 
 只加载 CHANNELS 声明的 IM 通道（不加载 Agent、不建路由），保持轻量；
 收到首条消息时回占位、写交接文件、释放长连接并拉起服务，服务退出后
-重新监听，形成「睡-醒」闭环。看门狗开关由 WATCH_ENABLED 控制。
+重新监听，形成「睡-醒」闭环。看门狗开关由 WATCH_ENABLED 控制，
+是否随开机启动由 WATCH_AUTOSTART 控制；计划任务用 pythonw 启动，
+全程没有可见窗口，拉起服务时也用 CREATE_NO_WINDOW 避免弹窗。
 """
 
 from __future__ import annotations
@@ -23,6 +25,11 @@ from main import setup_logging
 
 logger = logging.getLogger("watcher")
 
+# Windows 下创建子进程时不新开控制台窗口。pythonw 启动的看门狗本身没有控制台，
+# 若不指定，探测进程与拉起服务的 PowerShell / python 都会各弹一个黑窗。
+# 非 Windows 平台该值为 0，Popen 同样接受。
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def _service_running() -> bool:
     """检测是否已有服务进程在运行，避免唤醒时与手动启动的服务抢连接。"""
@@ -35,6 +42,7 @@ def _service_running() -> bool:
              " | Where-Object { $_.CommandLine -like '*main.py*' -and $_.CommandLine -like '*IM-Agent*' }"
              " | Measure-Object | Select-Object -ExpandProperty Count"],
             capture_output=True, text=True, timeout=10,
+            creationflags=_NO_WINDOW,
         )
         return result.stdout.strip() not in ("", "0")
     except Exception:
@@ -125,6 +133,7 @@ async def _session(cfg) -> None:
     logger.info("唤醒服务：%s", cfg.service_cmd)
     proc = await asyncio.create_subprocess_shell(
         cfg.service_cmd, cwd=str(Path(__file__).parent),
+        creationflags=_NO_WINDOW,
     )
     await proc.wait()
     logger.info("服务已退出，重新监听")
@@ -135,6 +144,10 @@ async def amain() -> None:
     setup_logging(cfg.log_level)
     if not cfg.watch_enabled:
         logger.info("看门狗开关未开启，退出")
+        return
+    if not cfg.watch_autostart:
+        # 计划任务仍会在登录时拉起本进程，这里读配置后立即退出，即「不随开机启动」
+        logger.info("开机自动启动已关闭，本次不启动看门狗")
         return
     logger.info("看门狗启动，监听通道：%s", ", ".join(cfg.channels))
     while True:

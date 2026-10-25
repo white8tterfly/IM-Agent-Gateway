@@ -94,6 +94,7 @@ async def send_push(self, msg: InboundMessage, content: str) -> None:
 ```
 启动
   ├─ 读配置；WATCH_ENABLED=0 → 记录日志并退出
+  ├─ WATCH_AUTOSTART=0 → 记录日志并退出（计划任务仍拉起本进程，但不监听、不占端口）
   ├─ 用 plugins.load_channel 加载 CHANNELS 声明的通道（与 main.py 同一入口，无 Agent）
   └─ 循环：
         ├─ 连接通道（gateway.run 在监听态）
@@ -110,6 +111,7 @@ async def send_push(self, msg: InboundMessage, content: str) -> None:
 - 看门狗只加载 IM 通道，不加载 Agent、不建路由，保持轻量。
 - 唤醒只触发一次：断开连接后不再有消息流入，天然避免重复唤醒。
 - 服务退出（空闲自动退或异常退出）后，看门狗重新连上监听。
+- 全程无可见窗口：计划任务用 `pythonw.exe` 启动看门狗（不带控制台），拉起服务与探测进程时统一带 `CREATE_NO_WINDOW`，登录后不弹黑色命令行窗口。
 
 ### 4.4 服务空闲自动退（`main.py` 改）
 
@@ -133,6 +135,7 @@ async def send_push(self, msg: InboundMessage, content: str) -> None:
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `WATCH_ENABLED` | `0` | 看门狗总开关；1=监听并唤醒，0=启动即退出 |
+| `WATCH_AUTOSTART` | `1` | 开机自动启动看门狗；1=登录后静默启动，0=不随开机启动（下次开机生效，已在运行的不受影响） |
 | `IDLE_EXIT` | `0` | 服务空闲自动退开关；1=空闲超时退出，0=常驻 |
 | `IDLE_EXIT_MIN` | `10` | 空闲判定分钟数（仅 `IDLE_EXIT=1` 生效） |
 | `WAKE_REPLY` | `正在唤醒…` | 看门狗唤醒前的占位文案 |
@@ -170,6 +173,7 @@ async def send_push(self, msg: InboundMessage, content: str) -> None:
 ## 9. 验收标准
 
 - A1：`WATCH_ENABLED=0` 时 `watcher.py` 启动即退出，无连接、无拉起。
+- A1b：`WATCH_AUTOSTART=0` 时 `watcher.py` 读配置即退出，不监听通道、不占端口；为 `1`（默认）时正常进入监听。
 - A2：`WATCH_ENABLED=1` 时，用 FakeChannel 发一条消息，断言：写入交接文件 → 回「正在唤醒」占位 → 按 `SERVICE_CMD` 拉起子进程 → 断开连接。
 - A3：服务启动读到交接文件时，重建该消息并走路由；`send_push` 被调用且结果内容正确。
 - A4：`IDLE_EXIT=0` 时服务空闲不再退出；`IDLE_EXIT=1` 且空闲超阈值、无 `inflight` 时退出；有任务执行中不退出。
@@ -184,6 +188,7 @@ async def send_push(self, msg: InboundMessage, content: str) -> None:
 | `scripts/test_wake_handoff.py` | `dump`/`load` 往返一致；原子写；损坏/残留文件的容错 |
 | `scripts/test_channel_push.py` | `send_push` 默认退化；FakeChannel 契约 |
 | `scripts/test_idle_monitor.py` | 空闲判定阈值、`inflight` 阻止退出、开关关闭时不退 |
-| `scripts/test_watch_flow.py` | R2/R3 全流程（monkeypatch 拉起命令与连接），复用 `test_registry.py` 的 FakeChannel |
+| `scripts/test_watch_flow.py` | R2/R3 全流程（monkeypatch 拉起命令与连接），复用 `test_registry.py` 的 FakeChannel；无窗口标志与启动门控 |
+| `scripts/test_watcher_autostart.py` | `WATCH_AUTOSTART` 解析、计划任务选择 `pythonw.exe`、配置区可改 |
 
 实现顺序：先写以上用例（红），再逐项实现契约、handoff、空闲监视、watcher、通道 `send_push` 覆写。
