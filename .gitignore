@@ -10,7 +10,6 @@ venv/
 # 运行时文件
 logs/
 status
-.trae_trajectories/
 
 # IDE / 编辑器
 .idea/
