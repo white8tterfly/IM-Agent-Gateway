@@ -65,7 +65,7 @@ CONFIG_META: list[ConfigItem] = [
         advanced=False),
     ConfigItem(
         "IDLE_EXIT", "idle_exit", "空闲自动休息开关",
-        "开启后，一段时间没人说话服务就自动休息，等看门狗下次唤醒",
+        "开启后，一段时间没人说话服务就自动休息，等下次有新消息再自动启动",
         type="bool", advanced=False),
     ConfigItem(
         "IDLE_EXIT_MIN", "idle_exit_min", "多久没人说话自动休息",
@@ -75,6 +75,11 @@ CONFIG_META: list[ConfigItem] = [
         "WAKE_REPLY", "wake_reply", "唤醒时先回的话",
         "服务刚被叫醒时先回复的占位内容，正式结果出来后会再发一条",
         advanced=False),
+    ConfigItem(
+        "WATCH_AUTOSTART", "watch_autostart", "开机自动在后台待命",
+        "开启后每次登录电脑都会在后台自动待命（不会弹窗口）；关闭后不再自动启动，"
+        "本次已在运行的不受影响，下次开机生效。",
+        type="bool", advanced=False),
     ConfigItem(
         "WORKBUDDY_CWD", "workbuddy_cwd", "办公智能体工作目录",
         "WorkBuddy 处理任务的工作目录（建议用没有空格的路径），文档、表格等文件相对这里读写",
@@ -202,20 +207,21 @@ CONFIG_META: list[ConfigItem] = [
         "LOG_LEVEL", "log_level", "日志级别",
         "DEBUG / INFO / WARNING / ERROR，排查问题时可临时调成 DEBUG"),
 
-    # ---------- 高级设置：看门狗细节 ----------
+    # ---------- 高级设置：消息唤醒细节 ----------
     ConfigItem(
-        "WATCH_ENABLED", "watch_enabled", "看门狗开关",
-        "开启后开机自启看门狗，只监听消息、收到后唤醒完整服务；开启后不要再手动长期运行主服务",
+        "WATCH_ENABLED", "watch_enabled", "消息唤醒开关",
+        "开启后由后台待命程序监听消息、收到后自动启动完整服务；是否随开机启动由「开机自动在后台待命」单独控制。"
+        "开启后不要再手动长期运行主服务",
         type="bool"),
     ConfigItem(
-        "SERVICE_CMD", "service_cmd", "看门狗启动命令",
-        "看门狗唤醒服务用的命令，在项目根目录执行"),
+        "SERVICE_CMD", "service_cmd", "唤醒服务时执行的命令",
+        "收到消息后自动启动完整服务所用的命令，在项目根目录执行"),
     ConfigItem(
-        "WAKE_HANDOFF_FILE", "wake_handoff_file", "唤醒交接文件",
-        "看门狗与服务之间传递唤醒消息的文件，一般无需修改"),
+        "WAKE_HANDOFF_FILE", "wake_handoff_file", "唤醒消息暂存文件",
+        "待命程序与完整服务之间传递唤醒消息的文件，一般无需修改"),
     ConfigItem(
-        "WATCH_HTTP_ENABLED", "watch_http_enabled", "睡眠托管开关",
-        "服务休息时由看门狗占住控制台端口，显示正在休息页并提供一键唤醒；需与看门狗开关搭配",
+        "WATCH_HTTP_ENABLED", "watch_http_enabled", "休息时托管控制台开关",
+        "服务休息时由后台待命程序占住控制台端口，显示正在休息页并提供一键唤醒；需与消息唤醒开关搭配",
         type="bool"),
 
     # ---------- 高级设置：网页控制台细节 ----------

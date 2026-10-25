@@ -184,7 +184,7 @@ async def main() -> None:
         check(advanced["SECRET"]["value"] == "", "空凭证保持空串（不误显示为已配置）")
         check(advanced["BOT_ID"]["value"] == "bot-123", "非敏感 ID 明文展示")
         check(advanced["SF_MAX_TOKENS"]["value"] == "4096", "max_tokens 明文（纠正正则误伤）")
-        check(advanced["CHANNELS"]["value"] == "wecom", "列表值转逗号串")
+        check(common["CHANNELS"]["value"] == "wecom", "列表值转逗号串")
         check(view["unknown"] == [], "全部字段已登记时 unknown 为空")
 
         # POST /api/config：写回 .env（与 CLI config set 同一命令层）

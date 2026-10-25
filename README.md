@@ -82,11 +82,12 @@ python main.py
 
 ## 消息唤醒（可选）
 
-默认关闭，不影响现有运行方式。开启后由两个**相互独立**的开关分别控制两个进程：
+默认关闭，不影响现有运行方式。开启后由以下**相互独立**的开关分别控制看门狗与服务的行为：
 
 | 开关 | 生效位置 | 说明 |
 | --- | --- | --- |
 | `WATCH_ENABLED` | `watcher.py` | 看门狗总开关：`1`=监听并唤醒，`0`=启动即退出 |
+| `WATCH_AUTOSTART` | `watcher.py` | 开机自动启动：`1`=登录后静默启动（默认），`0`=不随开机启动（下次开机生效） |
 | `IDLE_EXIT` | `main.py` | 服务空闲自动退开关：`1`=空闲超时退出，`0`=常驻 |
 
 工作方式：
@@ -104,6 +105,8 @@ Windows 开机自启（注册「登录时运行 watcher.py」的计划任务）�
 powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1          # 安装
 powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall   # 卸载
 ```
+
+计划任务用 `pythonw.exe` 启动看门狗（无控制台，登录后不会弹黑色命令行窗口）；拉起服务时也带 `CREATE_NO_WINDOW`，同样不弹窗。若不需要随开机启动但想保留计划任务，把 `WATCH_AUTOSTART` 设为 `0` 即可（下次开机生效），也可在管理台「配置」页直接改。
 
 相关配置见 [`.env.example`](./.env.example) 的「消息唤醒 / 看门狗」段。注意：`WATCH_ENABLED=1` 时应由看门狗常驻监听，不要再手动长期运行 `main.py`，二者会抢同一机器人的长连接。
 
@@ -295,7 +298,7 @@ scripts/
 ## 常见问题
 
 - **连接反复重连**：某些 IM 只允许一条长连接，确认没有其他程序也在订阅同一账号（开启 `WATCH_ENABLED=1` 后，看门狗与服务任一时刻只有一个持连接，勿再手动长期跑 `main.py`）。
-- **开启看门狗但服务没被唤醒**：确认 `.env` 里 `WATCH_ENABLED = "1"`，且开机自启计划任务已安装（`scripts\install_watcher.ps1`）；再看 `logs/im_agent_gateway.log`。
+- **开启看门狗但服务没被唤醒**：确认 `.env` 里 `WATCH_ENABLED = "1"`、`WATCH_AUTOSTART = "1"`（默认），且开机自启计划任务已安装（`scripts\install_watcher.ps1`）；再看 `logs/im_agent_gateway.log`。
 - **回复乱码/超时**：检查 `logs/im_agent_gateway.log`；任务超时调大对应 Agent 的超时配置。
 - **聊天走不通**：确认上一级目录 `.env` 的 API Key 有效（各示例实现带连通性测试脚本可验证）。
 - **某 Agent 报不可用**：该 Agent 前置条件未满足（未安装 CLI / 未登录 / 未配凭证）；满足后发 `/agent on <名称>` 开启。

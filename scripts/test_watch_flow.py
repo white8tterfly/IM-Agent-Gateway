@@ -47,6 +47,10 @@ class FakeProc:
         return 0
 
 
+# 记录拉起服务时传入的 creationflags，验证无窗口启动
+SPAWN_FLAGS: list[int] = []
+
+
 def check(cond: bool, label: str) -> None:
     print(("PASS" if cond else "FAIL"), "-", label)
     if not cond:
@@ -62,8 +66,9 @@ async def _run_session(handoff_path, service_running: bool, spawned: list[str]) 
     cfg.service_cmd = "python main.py"
     cfg.wake_handoff_file = str(handoff_path)
 
-    async def fake_spawn(cmd: str, cwd=None) -> FakeProc:
+    async def fake_spawn(cmd: str, cwd=None, creationflags=0) -> FakeProc:
         spawned.append(cmd)
+        SPAWN_FLAGS.append(creationflags)
         return FakeProc()
 
     watcher.load_channel = lambda spec, c: ch
@@ -86,6 +91,7 @@ async def main() -> None:
     raw = load_handoff(path)
     check(raw is not None and raw["content"] == "你好" and raw["im"] == "fake", "交接文件含唤醒消息与通道名")
     check(spawned == ["python main.py"], "按 service_cmd 拉起服务")
+    check(SPAWN_FLAGS == [watcher._NO_WINDOW], "拉起服务时带无窗口标志，不弹控制台")
     check(ch.closed, "拉起服务前释放长连接")
 
     # 二、已有服务在运行：不占位、不交接、不拉起
@@ -96,6 +102,33 @@ async def main() -> None:
     check(not path2.is_file(), "已有服务运行时不写交接文件")
     check(not spawned2, "已有服务运行时不重复拉起")
     check(ch2.closed, "已有服务运行时仍释放本轮连接")
+
+    # 三、启动门控：开机自启关闭 / 看门狗总开关关闭时不进入监听会话
+    from types import SimpleNamespace
+
+    orig_load, orig_setup, orig_session = (
+        watcher.load_config, watcher.setup_logging, watcher._session)
+    session_calls: list[str] = []
+
+    async def no_session(cfg) -> None:
+        session_calls.append("session")
+
+    watcher.setup_logging = lambda level: None
+    watcher._session = no_session
+    try:
+        watcher.load_config = lambda: SimpleNamespace(
+            log_level="INFO", watch_enabled=True, watch_autostart=False)
+        await watcher.amain()
+        check(not session_calls, "开机自启关闭时读配置即退出，不监听、不占端口")
+
+        watcher.load_config = lambda: SimpleNamespace(
+            log_level="INFO", watch_enabled=False, watch_autostart=True)
+        await watcher.amain()
+        check(not session_calls, "看门狗总开关关闭时仍按原逻辑退出")
+    finally:
+        watcher.load_config = orig_load
+        watcher.setup_logging = orig_setup
+        watcher._session = orig_session
 
     print("\n全部通过")
 
