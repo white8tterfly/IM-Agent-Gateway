@@ -2,7 +2,12 @@
 
 # IM-Agent Gateway
 
-<img src="assets/banner.webp" alt="IM-Agent Gateway：把任意 IM 接入任意 AI Agent，统一归一化、两级路由、流式回传" width="100%">
+简体中文 | [English](./README.en.md)
+
+<picture>
+  <source srcset="assets/banner.webp" type="image/webp">
+  <img src="assets/banner.png" alt="IM-Agent Gateway：把任意 IM 接入任意 AI Agent，统一归一化、两级路由、流式回传" width="100%">
+</picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3b82f6.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-6b7280.svg)](https://www.python.org/)
@@ -90,7 +95,10 @@ python main.py
 
 ## 核心能力
 
-<img src="assets/features.webp" alt="三项核心能力：任意 IM 接入、两级智能路由、会话与流式" width="100%">
+<picture>
+  <source srcset="assets/features.webp" type="image/webp">
+  <img src="assets/features.png" alt="三项核心能力：任意 IM 接入、两级智能路由、会话与流式" width="100%">
+</picture>
 
 | 能力 | 说明 |
 | --- | --- |
