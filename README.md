@@ -17,12 +17,12 @@
 | 消息唤醒 | 可选：登录后只运行轻量待命进程监听消息，收到消息再启动完整服务，空闲后自动退回 |
 | Web 控制台 | 可选：管理台（状态 / Agent 开关 / 任务 / 日志 / 配置）与聊天台（浏览器直连 Agent） |
 | 多入口管理 | IM 指令、Web 管理台、本地 CLI（`manage.py`）共用同一管理命令层，改动一致写回 `.env` |
-| 白名单 | 可按用户 ID 限制使用者；编码类 Agent 自动接受编辑需显式配置 |
+| 权限控制 | 可按用户 ID 限制使用者；是否自动接受 Agent 的编辑操作由各自权限模式决定 |
 
 ## 环境要求
 
 - Python 3.11 及以上。
-- 依赖见 [`requirements.txt`](./requirements.txt)，安装：`pip install -r requirements.txt`。
+- 依赖见 [`requirements.txt`](./requirements.txt)，安装：`pip install -r requirements.txt`。建议先创建虚拟环境：`python -m venv .venv`。
 - Windows、macOS、Linux 均可运行；开机自启脚本仅支持 Windows。
 - Qoder、WorkBuddy、Trae 三种 Agent 依赖各自的外部命令行工具，未安装时自动注册为不可用，不影响平台启动。
 
@@ -309,11 +309,11 @@ python scripts/test_agent_contract.py
 | Agent | WorkBuddy `workbuddy` | 办公：CLI 子进程、会话续接、流式解析 |
 | Agent | Trae `trae` | 编码：开源 CLI，任务进度与结果提取 |
 
-以上实现的实际可用性取决于各自的凭证、CLI 安装情况与平台侧配置。
+能否使用取决于各自的凭证与外部 CLI 安装情况；条件不满足时显示为不可用，不影响其他实现运行。
 
 ## 常见问题
 
-- **连接反复重连**：部分 IM 只允许一条长连接。确认没有其他程序订阅同一账号；开启消息唤醒后，待命进程与服务任一时刻只有一个持连接，不要再手动长期运行 `main.py`。
+- **连接反复重连**：部分 IM 只允许一条长连接。确认没有其他程序订阅同一账号；开启消息唤醒后，待命进程与服务任一时刻只能有一个持连接。
 - **开启消息唤醒后服务没被启动**：确认 `WATCH_ENABLED=1`、`WATCH_AUTOSTART=1`（默认），且已执行 `scripts\install_watcher.ps1` 安装计划任务；再查看 `logs/im_agent_gateway.log`。
 - **回复乱码或超时**：查看 `logs/im_agent_gateway.log`；超时可调大对应 Agent 的超时配置。
 - **聊天不可用**：确认对话 Agent 的 API Key 有效，且 `python manage.py config check` 没有提示缺项。
