@@ -143,6 +143,10 @@ async def amain() -> None:
                 len(gateway), ", ".join(gateway.channel_names),
                 ", ".join(f"{n}{'启用' if registry.is_active(n) else '停用'}" for n in registry.names),
                 cfg.qoder_cwd_resolved)
+    if "webui" in gateway.channel_names:
+        # 启动后直接给出页面地址，用户无需再去翻文档找端口
+        logger.info("Web 控制台：http://%s:%d/（聊天台 /chat.html）",
+                    cfg.webui_host, cfg.webui_port)
 
     try:
         run_task = asyncio.create_task(gateway.run())

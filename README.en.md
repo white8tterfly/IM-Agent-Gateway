@@ -90,7 +90,7 @@ You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gatew
 ### 3. Verify
 
 - Send a direct message to the bot and expect an agent reply.
-- Set `WEBUI_ENABLED=1` and open `http://127.0.0.1:8790` to view the console.
+- Set `WEBUI_ENABLED=1` and open `http://127.0.0.1:8790` to view the console, or run `python manage.py webui` to open it in your default browser.
 - In another terminal, run `python manage.py status` to confirm the service is online.
 
 ## Core Capabilities
@@ -105,7 +105,7 @@ You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gatew
 | Any IM channel | Implement `IMChannel` and declare it; messages are normalized into `InboundMessage`, and the router never sees protocol details |
 | Any agent | Implement `BaseAgent` and declare it; the platform exposes a shared `submit / stop / reset / busy` interface with per-conversation concurrency control |
 | Two-level routing | Decide the message intent (chat / coding / office) first, then pick an agent of that kind by task complexity; falls back to keyword scoring when the decision model is unavailable |
-| Framework commands | `/agent`, `/help`, and `/status` come from the platform; agent-specific commands are declared by each agent |
+| Framework commands | `/agent`, `/help`, `/status`, and `/webui` come from the platform; agent-specific commands are declared by each agent |
 | Streaming replies | A shared streaming interface; IMs without streaming support automatically fall back to sending a whole message |
 | Sessions and queues | Each IM conversation keeps separate memory per agent; tasks within a conversation run serially and new messages queue up |
 | Wake on message | Optional: keep only a lightweight standby process after login, start the full service when a message arrives, and return to standby when idle |
@@ -143,6 +143,7 @@ Availability depends on credentials and external CLI installation. When prerequi
 | `/agent <name>` / `/agent auto` | Pin the conversation to an agent / restore auto-routing |
 | `/agent on\|off <name>` | Enable or disable an agent at runtime without restarting |
 | `/help` / `/status` | Show help (grouped by agent) / show service status |
+| `/webui` | Get the web console URLs (admin and chat) directly in the conversation, ready to open |
 | Agent-specific commands | Provided by each agent (such as `/cd`, `/ws`, `/model`, `/stop`, `/reset`); whoever receives the message handles it |
 
 Agent switching and toggling are provided by the platform. All other commands are declared by each agent; unsupported commands return an unknown-command notice.
@@ -268,6 +269,8 @@ Disabled by default. When enabled, the browser behaves like a third IM and share
 
 The webui channel and the sleep-state host share the port, so only one process uses it at a time. HTTP binds to `127.0.0.1` only. The chat console uses `WEBUI_USER_ID` (default `webui`), which must be included in `ALLOWED_USERS` when an allowlist is set.
 
+If you do not know the console address, run `python manage.py webui`: when the page is reachable it opens the admin console in your default browser and prints the chat console URL; when the service is not running it tells you to start it first. On a remote terminal, `python manage.py webui --no-open` only prints the addresses. You can also send `/webui` in Feishu, WeCom, or any other IM conversation, and the bot replies with the admin and chat links.
+
 ## CLI Reference
 
 `manage.py` is the local management entry point. It shares one command layer and validation rules with IM commands and the web console. Offline commands read and write the project `.env` directly and do not need a running service. Online commands call the local management endpoint and require `WEBUI_ENABLED=1` with the service running.
@@ -278,6 +281,7 @@ The webui channel and the sleep-state host share the port, so only one process u
 | `python manage.py config check` | No | Check channel requirements, allowlist conflicts, and agent prerequisites |
 | `python manage.py config set <key> <value>` | No | Change a setting and write it back to `.env` |
 | `python manage.py status` | Yes | Service status, channel connections, agent counts, idle countdown |
+| `python manage.py webui [--no-open]` | Yes | Open the web console in the default browser and print the admin and chat URLs |
 | `python manage.py agents` | Yes | Agent list with intent, complexity tier, switch state, and availability |
 | `python manage.py agent on\|off <name>` | Yes | Enable or disable an agent, write it back to `.env`, and keep it across restarts |
 
@@ -285,6 +289,7 @@ The webui channel and the sleep-state host share the port, so only one process u
 python manage.py config set DEFAULT_AGENT workbuddy
 python manage.py agent off qoder
 python manage.py status
+python manage.py webui
 ```
 
 Rules for configuration changes:
@@ -314,7 +319,7 @@ Exit codes: `0` means the command completed (including `config check` finding pr
 - **Garbled replies or timeouts**: check `logs/im_agent_gateway.log`; increase the agent timeout setting if needed.
 - **Chat is unavailable**: confirm the chat agent's API key is valid and `python manage.py config check` reports no missing items.
 - **An agent shows as unavailable**: prerequisites are not met (CLI not installed, not signed in, or credentials missing). After fixing them, run `python manage.py agent on <name>`.
-- **The web console does not open**: confirm `WEBUI_ENABLED=1`, the service is running, and the port is free. To keep the page reachable and support one-click wake while the service sleeps, enable both `WATCH_ENABLED=1` and `WATCH_HTTP_ENABLED=1`.
+- **The web console does not open**: confirm `WEBUI_ENABLED=1`, the service is running, and the port is free. Run `python manage.py webui` first; if it reports that the service is not running, start it with `python main.py` or `run.bat`. To keep the page reachable and support one-click wake while the service sleeps, enable both `WATCH_ENABLED=1` and `WATCH_HTTP_ENABLED=1`.
 
 ## Project Layout
 

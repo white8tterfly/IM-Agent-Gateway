@@ -112,6 +112,11 @@ def dead(request: httpx.Request) -> httpx.Response:
     raise httpx.ConnectError("connection refused")
 
 
+def html_page(request: httpx.Request) -> httpx.Response:
+    """睡眠态托管页：端口有响应但返回 HTML，不是管理接口数据。"""
+    return httpx.Response(200, text="<html>服务休息中</html>")
+
+
 def test_online() -> None:
     cfg = base_cfg()
     tr = httpx.MockTransport(handler)
@@ -133,6 +138,47 @@ def test_online() -> None:
     out = manage.cmd_agent_active(cfg, "alpha", True, transport=tr_dead)
     check("睡眠" in out, "开关命令不可达时同样提示")
 
+    # 端口被睡眠态托管页占用时返回 HTML，命令应降级提示而不是崩溃
+    out = manage.cmd_status(cfg, transport=httpx.MockTransport(html_page))
+    check("睡眠" in out, "托管页返回 HTML 时 status 给出提示而不是报错")
+
+
+# ---------- 在线：打开 Web 控制台 ----------
+
+def test_webui() -> None:
+    # 未开启 webui 通道时给出开启方式，不尝试打开浏览器
+    cfg = base_cfg()
+    out = manage.cmd_webui(cfg, opener=None)
+    check("WEBUI_ENABLED 1" in out, "webui 未开启时提示开启命令")
+
+    # 通配绑定地址应换成本机回环地址；服务不可达时不打开浏览器
+    cfg = base_cfg()
+    cfg.webui_enabled = True
+    cfg.webui_host = "0.0.0.0"
+    cfg.webui_port = 9001
+    opened: list[str] = []
+    out = manage.cmd_webui(cfg, transport=httpx.MockTransport(dead),
+                           opener=lambda url: opened.append(url) or True)
+    check("服务未运行" in out and "http://127.0.0.1:9001" in out,
+          "webui 不可达时给出启动指引与本机地址")
+    check(not opened, "webui 不可达时不打开浏览器")
+
+    # 服务可达时打开管理台，并同时给出聊天台地址
+    out = manage.cmd_webui(cfg, transport=httpx.MockTransport(handler),
+                           opener=lambda url: opened.append(url) or True)
+    check(opened == ["http://127.0.0.1:9001"], "webui 可达时打开管理台地址")
+    check("已在默认浏览器打开" in out, "webui 成功打开时给出结果提示")
+    check("http://127.0.0.1:9001/chat.html" in out, "webui 同时输出聊天台地址")
+
+    # --no-open 等价于 opener 为空：只打印地址
+    out = manage.cmd_webui(cfg, transport=httpx.MockTransport(handler), opener=None)
+    check("请手动复制" in out and "http://127.0.0.1:9001" in out,
+          "webui --no-open 只输出地址")
+
+    # 睡眠态托管页同样可以打开（页面提供唤醒按钮）
+    out = manage.cmd_webui(cfg, transport=httpx.MockTransport(html_page), opener=None)
+    check("管理台" in out and "服务未运行" not in out, "托管页返回 HTML 时仍可打开控制台")
+
 
 # ---------- 子进程冒烟（真实进程跑通离线命令） ----------
 
@@ -153,6 +199,12 @@ def test_smoke() -> None:
         capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60,
     )
     check(r.returncode == 0 and r.stdout.strip(), "子进程 status 可运行")
+    r = subprocess.run(
+        [sys.executable, "manage.py", "webui", "--no-open"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60,
+    )
+    check(r.returncode == 0 and ("管理台" in r.stdout or "控制台" in r.stdout),
+          "子进程 webui --no-open 可运行")
 
 
 def main() -> None:
@@ -160,6 +212,7 @@ def main() -> None:
     test_check()
     test_set()
     test_online()
+    test_webui()
     test_smoke()
     print("\n全部通过")
 

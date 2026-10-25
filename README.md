@@ -90,7 +90,7 @@ python main.py
 ### 3. 验证
 
 - 给机器人发一条单聊消息，应收到 Agent 回复。
-- 设置 `WEBUI_ENABLED=1` 后访问 `http://127.0.0.1:8790`，打开管理台。
+- 设置 `WEBUI_ENABLED=1` 后访问 `http://127.0.0.1:8790`，打开管理台；也可以执行 `python manage.py webui` 自动打开浏览器。
 - 另开终端执行 `python manage.py status`，确认服务在线。
 
 ## 核心能力
@@ -105,7 +105,7 @@ python main.py
 | 多 IM 接入 | 实现 `IMChannel` 并声明即可接入；报文统一归一化为 `InboundMessage`，路由层不感知具体协议 |
 | 多 Agent 接入 | 实现 `BaseAgent` 并声明即可接入；统一 `submit / stop / reset / busy` 接口，会话级并发控制 |
 | 两级智能路由 | 先判定消息用途（对话 / 编码 / 办公），再在同类 Agent 中按问题复杂度选择；决策模型不可用时退化为关键词计分 |
-| 框架命令 | `/agent`、`/help`、`/status` 由平台提供；Agent 特有指令由各 Agent 声明 |
+| 框架命令 | `/agent`、`/help`、`/status`、`/webui` 由平台提供；Agent 特有指令由各 Agent 声明 |
 | 流式回复 | 平台定义统一流式接口；不支持流式的 IM 自动退化为整条发送 |
 | 会话与队列 | 每个 IM 会话分别维护各 Agent 的会话记忆；同一会话内任务串行，期间新消息自动排队 |
 | 消息唤醒 | 可选：登录后只运行轻量待命进程监听消息，收到消息再启动完整服务，空闲后自动退回 |
@@ -143,6 +143,7 @@ python main.py
 | `/agent <名称>` / `/agent auto` | 固定到某个 Agent / 恢复自动路由 |
 | `/agent on\|off <名称>` | 运行时开启或关闭 Agent，无需重启 |
 | `/help` / `/status` | 查看帮助（含各 Agent 指令分组）/ 查看服务状态 |
+| `/webui` | 在对话里获取 Web 控制台地址（管理台与聊天台），点击即可打开 |
 | Agent 特有指令 | 由各 Agent 提供（如 `/cd`、`/ws`、`/model`、`/stop`、`/reset`），消息路由到谁就由谁处理 |
 
 切换与开关 Agent 的命令由平台提供，其余指令由各 Agent 自行声明；不支持的指令会提示未知命令。
@@ -268,6 +269,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 
 端口由服务的 webui 通道与睡眠态托管共用，任一时刻只有一个进程占用。HTTP 仅绑定 `127.0.0.1`。聊天台身份为 `WEBUI_USER_ID`（默认 `webui`），设置 `ALLOWED_USERS` 白名单时需包含它。
 
+不知道页面地址时，执行 `python manage.py webui` 即可：页面可达会用默认浏览器打开管理台并打印聊天台地址，服务未运行会提示先启动；远程终端可用 `python manage.py webui --no-open` 只输出地址。也可以直接在飞书、企微等对话里发送 `/webui`，机器人会回复管理台与聊天台链接。
+
 ## 命令行手册
 
 `manage.py` 是本地管理入口，与 IM 指令、Web 管理台共用同一套管理命令层与校验规则。离线命令直接读写项目 `.env`，不需要服务在运行；在线命令访问服务的本地管理端点，需要服务已启动且 `WEBUI_ENABLED=1`。
@@ -278,6 +281,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 | `python manage.py config check` | 否 | 检查通道必填项、白名单冲突与 Agent 前置条件 |
 | `python manage.py config set <键> <值>` | 否 | 修改配置并写回项目 `.env` |
 | `python manage.py status` | 是 | 服务状态、通道连接情况、Agent 数量、空闲倒计时 |
+| `python manage.py webui [--no-open]` | 是 | 在默认浏览器打开 Web 控制台，并打印管理台与聊天台地址 |
 | `python manage.py agents` | 是 | Agent 列表，含用途、复杂度档位、开关与可用状态 |
 | `python manage.py agent on\|off <名称>` | 是 | 开启或关闭 Agent，写回 `.env`，重启后保持 |
 
@@ -285,6 +289,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 python manage.py config set DEFAULT_AGENT workbuddy
 python manage.py agent off qoder
 python manage.py status
+python manage.py webui
 ```
 
 修改配置的规则：
@@ -314,7 +319,7 @@ python manage.py status
 - **回复乱码或超时**：查看 `logs/im_agent_gateway.log`；超时可调大对应 Agent 的超时配置。
 - **聊天不可用**：确认对话 Agent 的 API Key 有效，且 `python manage.py config check` 没有提示缺项。
 - **Agent 显示不可用**：前置条件未满足（未安装 CLI、未登录或未配凭证）；满足后执行 `python manage.py agent on <名称>`。
-- **Web 控制台打不开**：确认 `WEBUI_ENABLED=1`、服务已启动、端口未被占用；若希望服务休息时页面仍可访问并支持一键唤醒，需同时开启 `WATCH_ENABLED=1` 与 `WATCH_HTTP_ENABLED=1`。
+- **Web 控制台打不开**：确认 `WEBUI_ENABLED=1`、服务已启动、端口未被占用；可先执行 `python manage.py webui` 自检，若提示服务未运行，先执行 `python main.py` 或双击 `run.bat`；若希望服务休息时页面仍可访问并支持一键唤醒，需同时开启 `WATCH_ENABLED=1` 与 `WATCH_HTTP_ENABLED=1`。
 
 ## 目录结构
 

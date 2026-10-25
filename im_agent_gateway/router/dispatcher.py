@@ -108,6 +108,7 @@ class MessageRouter:
             f"/agent [{names}|auto]  切换路由 Agent（固定/自动）",
             "/agent on|off <名称>   开启/关闭 Agent 服务",
             "/status        查看当前状态",
+            "/webui         获取 Web 控制台地址",
             "/help          显示本帮助",
         ]
         for agent in self.registry.agents:
@@ -117,6 +118,23 @@ class MessageRouter:
             lines.append("")
             lines.append(f"【{agent.label}】")
             lines.extend(f"{c.usage:<20}{c.brief}" for c in cmds)
+        return "\n".join(lines)
+
+    def _webui_text(self) -> str:
+        """返回 Web 控制台地址；默认仅绑定本机，跨设备访问需调整监听地址。"""
+        if not self.cfg.webui_enabled and "webui" not in self.cfg.channels:
+            return ("Web 控制台未开启。\n"
+                    "管理员可在服务所在电脑执行：python manage.py config set WEBUI_ENABLED 1\n"
+                    "然后重启服务，再发送 /webui。")
+
+        host = self.cfg.webui_host
+        if host in ("", "0.0.0.0", "::"):
+            host = "127.0.0.1"
+        base = f"http://{host}:{self.cfg.webui_port}"
+        lines = ["Web 控制台", f"管理台：{base}", f"聊天台：{base}/chat.html"]
+        if host in ("127.0.0.1", "localhost"):
+            lines.append("提示：该地址只绑定服务所在电脑，手机或其他电脑访问需把 WEBUI_HOST "
+                         "改为 0.0.0.0 并重启服务，再用本机局域网 IP 打开。")
         return "\n".join(lines)
 
     # ---------- 通道回调 ----------
@@ -166,6 +184,9 @@ class MessageRouter:
 
         elif cmd == "/status":
             await msg.channel.send_text(msg, await self._status_text(chat_key))
+
+        elif cmd == "/webui":
+            await msg.channel.send_text(msg, self._webui_text())
 
         elif cmd == "/agent":
             await self._handle_agent(chat_key, arg, msg)

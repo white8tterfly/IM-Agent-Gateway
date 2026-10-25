@@ -12,6 +12,7 @@ import httpx
 from im_agent_gateway.agents.base import AgentResult, BaseAgent
 from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import Config
+from im_agent_gateway.gateway.base import InboundMessage
 from im_agent_gateway.router.dispatcher import MessageRouter
 from im_agent_gateway.router.jev_router import JevRouter
 
@@ -75,7 +76,64 @@ def fake_jev(answer: dict) -> httpx.MockTransport:
     return httpx.MockTransport(_h)
 
 
+def test_webui_command() -> None:
+    """IM 指令 /webui：返回控制台地址，未开启时给出开启方式。"""
+    cfg = make_cfg()
+    cfg.webui_enabled = False
+    cfg.channels = []
+    router = MessageRouter(cfg, AgentRegistry())
+    out = router._webui_text()
+    check("WEBUI_ENABLED 1" in out, "webui 指令：未开启时提示开启方式")
+    check("/webui" in router._help_text(), "帮助文本包含 /webui")
+
+    # 通配绑定地址换回环地址，并提示跨设备访问需调整监听地址
+    cfg2 = make_cfg()
+    cfg2.webui_enabled = True
+    cfg2.channels = ["webui"]
+    cfg2.webui_host = "0.0.0.0"
+    cfg2.webui_port = 8790
+    out = MessageRouter(cfg2, AgentRegistry())._webui_text()
+    check("http://127.0.0.1:8790" in out and "/chat.html" in out,
+          "webui 指令：输出管理台与聊天台地址")
+    check("局域网 IP" in out, "webui 指令：本机地址模式提示跨设备访问方式")
+
+    # 显式监听局域网地址时按配置输出，不再加本机限制提示
+    cfg2.webui_host = "192.168.1.8"
+    out = MessageRouter(cfg2, AgentRegistry())._webui_text()
+    check("http://192.168.1.8:8790" in out and "局域网 IP" not in out,
+          "webui 指令：监听局域网地址时直接输出该地址")
+
+
+class FakeChannel:
+    """只记录回复文本的假通道，用于验证 IM 指令分发。"""
+
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    async def send_text(self, msg: InboundMessage, text: str) -> None:
+        self.sent.append(text)
+
+
+async def test_webui_dispatch() -> None:
+    """发送 /webui 应直接回复控制台地址，不进入 Agent 路由。"""
+    cfg = make_cfg()
+    cfg.webui_enabled = True
+    cfg.channels = ["webui"]
+    router = MessageRouter(cfg, AgentRegistry())
+    channel = FakeChannel()
+    msg = InboundMessage(
+        channel=channel, im="feishu", msg_id="m1", user_id="u1", chat_id="",
+        chat_type="single", msg_type="text", content="/webui", reply_token="t1",
+    )
+    await router.handle_msg(msg)
+    check(len(channel.sent) == 1 and "管理台" in channel.sent[0],
+          "/webui 经消息入口分发并回复控制台地址")
+
+
 async def main() -> None:
+    test_webui_command()
+    await test_webui_dispatch()
+
     # ===== 一、固定路由不受两级改造影响 =====
     cfg = make_cfg(default_agent="chat1")
     registry = AgentRegistry()

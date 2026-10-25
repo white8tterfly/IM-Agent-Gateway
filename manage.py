@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import webbrowser
 
 import httpx
 
@@ -123,10 +124,15 @@ def cmd_config_set(cfg: Config, key: str, value: str) -> str:
 
 def _fetch(cfg: Config, path: str, transport=None, method: str = "GET",
            json_body: dict | None = None):
-    """打管理端点；网络不可达时抛 httpx.HTTPError，由调用方统一提示。"""
+    """打管理端点；网络不可达或响应不是 JSON 时抛 httpx.HTTPError，由调用方统一提示。"""
     with httpx.Client(base_url=f"http://{cfg.webui_host}:{cfg.webui_port}",
                       transport=transport, timeout=3.0) as c:
-        return c.request(method, path, json=json_body).json()
+        resp = c.request(method, path, json=json_body)
+    try:
+        return resp.json()
+    except ValueError as exc:
+        # 端口可能被睡眠态托管页占用（返回 HTML 而非接口数据），按不可用处理
+        raise httpx.DecodingError(f"{path} 返回的不是接口数据") from exc
 
 
 def cmd_status(cfg: Config, transport=None) -> str:
@@ -180,6 +186,53 @@ def cmd_agent_active(cfg: Config, name: str, active: bool, transport=None) -> st
     return f"已{'开启' if active else '关闭'} {name}（已写回 .env，重启后保持）"
 
 
+def webui_base_url(cfg: Config) -> str:
+    """浏览器可访问的控制台地址：通配绑定地址换成回环地址，避免打开 0.0.0.0 失败。"""
+    host = cfg.webui_host if cfg.webui_host not in ("", "0.0.0.0", "::") else "127.0.0.1"
+    return f"http://{host}:{cfg.webui_port}"
+
+
+def _webui_reachable(cfg: Config, transport=None) -> bool:
+    """端口是否有响应：只判断连通性，不解析正文。
+
+    服务睡眠时端口可能由睡眠态托管页占住（返回 HTML），页面仍可打开并一键唤醒，
+    因此这里不要求接口返回 JSON。
+    """
+    try:
+        with httpx.Client(base_url=f"http://{cfg.webui_host}:{cfg.webui_port}",
+                          transport=transport, timeout=3.0) as c:
+            c.get("/api/status")
+        return True
+    except httpx.HTTPError:
+        return False
+
+
+def cmd_webui(cfg: Config, transport=None, opener=webbrowser.open) -> str:
+    """打开 Web 控制台：页面可达时拉起默认浏览器，不可达时给出启动指引。
+
+    opener 为空表示只打印地址、不打开浏览器，方便远程终端或脚本调用。
+    """
+    if not cfg.webui_enabled and "webui" not in cfg.channels:
+        return ("Web 控制台未开启，页面暂时无法访问。\n"
+                "执行 python manage.py config set WEBUI_ENABLED 1 后重启服务，再运行本命令。")
+
+    base = webui_base_url(cfg)
+    if not _webui_reachable(cfg, transport):
+        return ("服务未运行，页面暂时打不开。\n"
+                "请先在本机启动服务：python main.py（Windows 也可双击 run.bat），"
+                "稍等几秒后再运行 python manage.py webui。\n"
+                f"控制台地址：{base}")
+
+    if opener is not None and opener(base):
+        tip = "已在默认浏览器打开管理台。"
+    elif opener is not None:
+        tip = "未能自动打开浏览器，请手动复制下面的地址访问。"
+    else:
+        tip = "请手动复制下面的地址访问。"
+
+    return "\n".join((tip, f"管理台：{base}", f"聊天台：{base}/chat.html"))
+
+
 # ---------- 命令行入口 ----------
 
 def main(argv=None) -> int:
@@ -197,6 +250,9 @@ def main(argv=None) -> int:
 
     sub.add_parser("status", help="查看服务状态（需要服务在运行）")
     sub.add_parser("agents", help="查看智能体列表（需要服务在运行）")
+    p_webui = sub.add_parser("webui", aliases=["open"], help="在浏览器打开 Web 控制台")
+    p_webui.add_argument("--no-open", action="store_true",
+                         help="只输出控制台地址，不自动打开浏览器")
     p_agent = sub.add_parser("agent", help="开启 / 关闭智能体（需要服务在运行）")
     p_agent.add_argument("action", choices=["on", "off"])
     p_agent.add_argument("name", help="智能体注册名")
@@ -224,6 +280,8 @@ def main(argv=None) -> int:
         print(cmd_status(cfg))
     elif args.cmd == "agents":
         print(cmd_agents(cfg))
+    elif args.cmd in ("webui", "open"):
+        print(cmd_webui(cfg, opener=None if args.no_open else webbrowser.open))
     else:
         print(cmd_agent_active(cfg, args.name, args.action == "on"))
     return 0
