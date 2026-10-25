@@ -5,8 +5,8 @@
 [简体中文](./README.md) | English
 
 <picture>
-  <source srcset="assets/banner.webp" type="image/webp">
-  <img src="assets/banner.png" alt="IM-Agent Gateway: connect any IM channel to any AI agent with unified normalization, two-level routing, and streaming replies" width="100%">
+  <source srcset="assets/banner.en.webp" type="image/webp">
+  <img src="assets/banner.en.png" alt="IM-Agent Gateway: connect any IM channel to any AI agent with unified normalization, two-level routing, and streaming replies" width="100%">
 </picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-3b82f6.svg)](./LICENSE)
@@ -96,8 +96,8 @@ You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gatew
 ## Core Capabilities
 
 <picture>
-  <source srcset="assets/features.webp" type="image/webp">
-  <img src="assets/features.png" alt="Three core capabilities: any IM channel, two-level routing, sessions and streaming" width="100%">
+  <source srcset="assets/features.en.webp" type="image/webp">
+  <img src="assets/features.en.png" alt="Three core capabilities: any IM channel, two-level routing, sessions and streaming" width="100%">
 </picture>
 
 | Capability | Description |
