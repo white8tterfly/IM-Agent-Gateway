@@ -87,9 +87,9 @@ python main.py
 
 You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gateway.log`.
 
-To start without a console window, double-click the "IM-Agent Gateway" shortcut on your desktop: it launches `main.py` with `pythonw.exe` in the background, still logging to `logs/im_agent_gateway.log`. A second launch is rejected by the single-instance lock and never competes for the same bot connection.
+Double-clicking the "IM-Agent Gateway" desktop shortcut opens a startup window: the service runs in the background without a console, opens the Web console once it is ready (when enabled), then the window closes itself. Startup failures or an already-running instance are reported right in that window. Logs still go to `logs/im_agent_gateway.log`.
 
-The first run of `run.bat` creates an "IM-Agent Gateway" desktop shortcut once, with its own icon. After that the shortcut is never created or modified again, whether it still exists or not. To force a rebuild, run `create_shortcut.bat` or `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`.
+The first run of `run.bat` creates an "IM-Agent Gateway" desktop shortcut once, with its own icon. After that the shortcut is never created or modified again, whether it still exists or not. To rebuild it with the latest arguments, run `create_shortcut.bat` or `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`.
 
 ### 3. Verify
 
