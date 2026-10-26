@@ -89,6 +89,8 @@ You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gatew
 
 Double-clicking the "IM-Agent Gateway" desktop shortcut opens a startup window: the service runs in the background without a console, opens the Web console once it is ready (when enabled), then the window closes itself. Startup failures or an already-running instance are reported right in that window. Logs still go to `logs/im_agent_gateway.log`.
 
+While the service runs, an "IM-Agent Gateway" tray icon appears in the notification area. Right-click it to open the Web console or chat console, or choose "退出服务" to shut down gracefully (same as `Ctrl+C`, closing IM connections first). The tray needs `pystray`; if it is missing, the service still starts, just without the icon.
+
 The first run of `run.bat` creates an "IM-Agent Gateway" desktop shortcut once, with its own icon. After that the shortcut is never created or modified again, whether it still exists or not. To rebuild it with the latest arguments, run `create_shortcut.bat` or `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`.
 
 ### 3. Verify
@@ -151,6 +153,8 @@ Availability depends on credentials and external CLI installation. When prerequi
 | Agent-specific commands | Provided by each agent (such as `/cd`, `/ws`, `/model`, `/stop`, `/reset`); whoever receives the message handles it |
 
 Agent switching and toggling are provided by the platform. All other commands are declared by each agent; unsupported commands return an unknown-command notice.
+
+Each user receives a short command hint on their first message (only once per user, tracked in `.first_use.json`). Set `FIRST_USE_GUIDE=0` to disable it.
 
 ## Adding an IM Channel
 
@@ -226,6 +230,7 @@ Agent switching and toggling are provided by the platform. All other commands ar
 | `DEFAULT_AGENT` | Fallback agent when auto-routing is unavailable | `siliconflow` |
 | `AUTO_ROUTE` | Enable auto-routing | `1` |
 | `WEBUI_ENABLED` | Enable the web console | `1` |
+| `FIRST_USE_GUIDE` | Send a short command hint on the first message from a user | `1` |
 | `WATCH_ENABLED` | Master switch for wake-on-message | `0` |
 | `ALLOWED_USERS` | User allowlist; empty means unrestricted | empty |
 

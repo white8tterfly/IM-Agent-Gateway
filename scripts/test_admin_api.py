@@ -212,6 +212,22 @@ async def main() -> None:
         st = svc3.status()
         check(st["channels"] == [{"name": "fake", "connected": True}], "status 含通道连接状态")
 
+        # POST /api/shutdown：接入退出信号后返回 ok=true；未接入时明确返回 false
+        r = client.post("/api/shutdown")
+        check(r.status_code == 200 and r.json()["ok"] is False,
+              "未接入退出信号时 shutdown 返回 ok=false")
+
+        evt = asyncio.Event()
+        svc4 = ManageService(cfg, registry, router, gateway=None, log_file=log,
+                             shutdown_event=evt)
+        app2 = FastAPI()
+        app2.include_router(create_router(svc4))
+        r = TestClient(app2).post("/api/shutdown")
+        check(r.json()["ok"] is True, "接入退出信号后 shutdown 返回 ok=true")
+        check(svc4.request_shutdown(delay=0) is True, "退出请求返回成功")
+        await asyncio.sleep(0.05)
+        check(evt.is_set(), "退出请求触发退出信号")
+
         await router.close()
         await router2.close()
 

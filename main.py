@@ -159,7 +159,9 @@ async def amain() -> None:
 
     # 管理服务：聚合平台状态供 Web 管理端点与 CLI 查询；
     # 路由层任务结束时上报最近任务（环形缓冲），webui 通道开启时挂载 REST 端点
-    manage = ManageService(cfg, registry, router, gateway=gateway)
+    shutdown = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    manage = ManageService(cfg, registry, router, gateway=gateway, shutdown_event=shutdown)
     router.on_task_event = manage.on_task_event
 
     # 管理端点注入：通道自声明 mount_admin 能力即挂载（可选契约，webui 实现；
@@ -179,24 +181,35 @@ async def amain() -> None:
         logger.info("Web 控制台：http://%s:%d/（聊天台 /chat.html）",
                     cfg.webui_host, cfg.webui_port)
 
+    # 系统托盘：后台无窗口运行时，可从任务栏角落打开控制台或退出服务
+    tray_icon = None
+    if os.name == "nt":
+        try:
+            from im_agent_gateway.tray import start_tray
+            tray_icon = start_tray(cfg, lambda: loop.call_soon_threadsafe(shutdown.set))
+        except Exception as exc:  # 托盘只是便利功能，失败不能影响服务
+            logger.warning("托盘图标启动失败：%s", exc)
+
     try:
         run_task = asyncio.create_task(gateway.run())
+        stop_task = asyncio.create_task(shutdown.wait())
+        tasks = {run_task, stop_task}
         # 看门狗唤醒交接：等服务建立长连接后重放待处理消息
         await replay_pending(router, gateway, cfg)
         if cfg.idle_exit:
-            idle_task = asyncio.create_task(idle_monitor(router, gateway, cfg))
-            done, pending = await asyncio.wait(
-                {run_task, idle_task}, return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in pending:
-                task.cancel()
-            for task in done:
-                task.result()  # 抛出异常（如有）
-        else:
-            await run_task
+            tasks.add(asyncio.create_task(idle_monitor(router, gateway, cfg)))
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        for task in done:
+            task.result()  # 抛出异常（如有）
+        if stop_task in done:
+            logger.info("收到退出请求，服务关闭")
     except KeyboardInterrupt:
         logger.info("收到退出信号")
     finally:
+        if tray_icon is not None:
+            tray_icon.stop()
         await gateway.close()
         await router.close()
         await registry.close()

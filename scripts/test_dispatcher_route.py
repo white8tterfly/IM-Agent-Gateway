@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -121,18 +122,63 @@ async def test_webui_dispatch() -> None:
     cfg.channels = ["webui"]
     router = MessageRouter(cfg, AgentRegistry())
     channel = FakeChannel()
-    msg = InboundMessage(
-        channel=channel, im="feishu", msg_id="m1", user_id="u1", chat_id="",
-        chat_type="single", msg_type="text", content="/webui", reply_token="t1",
-    )
-    await router.handle_msg(msg)
+    with tempfile.TemporaryDirectory() as td:
+        router._guide_state_file = Path(td) / ".first_use.json"
+        router._guided = router._load_guided()
+        msg = InboundMessage(
+            channel=channel, im="feishu", msg_id="m1", user_id="u1", chat_id="",
+            chat_type="single", msg_type="text", content="/webui", reply_token="t1",
+        )
+        await router.handle_msg(msg)
     check(len(channel.sent) == 1 and "管理台" in channel.sent[0],
           "/webui 经消息入口分发并回复控制台地址")
+
+
+async def test_first_use_guide() -> None:
+    """首次使用引导：同一用户只提示一次、重启后仍记得、直接发指令不打扰。"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = make_cfg()
+        router = MessageRouter(cfg, AgentRegistry())
+        router._guide_state_file = Path(td) / ".first_use.json"
+        router._guided = router._load_guided()
+        channel = FakeChannel()
+
+        def msg(user_id: str, content: str) -> InboundMessage:
+            return InboundMessage(
+                channel=channel, im="feishu", msg_id=f"m-{user_id}", user_id=user_id,
+                chat_id="", chat_type="single", msg_type="text", content=content,
+                reply_token="t1",
+            )
+
+        await router._guide_first_use(msg("u1", "你好"))
+        check(len(channel.sent) == 1 and "初次使用提示" in channel.sent[0],
+              "首条消息先收到使用提示")
+
+        await router._guide_first_use(msg("u1", "第二条"))
+        check(len(channel.sent) == 1, "同一用户只提示一次")
+
+        # 重启（新路由器读同一记录文件）后不再重复提示
+        router2 = MessageRouter(cfg, AgentRegistry())
+        router2._guide_state_file = router._guide_state_file
+        router2._guided = router2._load_guided()
+        await router2._guide_first_use(msg("u1", "重启后的消息"))
+        check(len(channel.sent) == 1, "重启后不重复提示")
+
+        # 直接发指令说明已经会用：只记录不打扰
+        await router2._guide_first_use(msg("u2", "/help"))
+        check(len(channel.sent) == 1, "直接发指令不打扰")
+        check("feishu:u2" in router2._guided, "直接发指令的用户也记为已引导")
+
+        # 关闭开关后不再提示新用户
+        cfg.first_use_guide = False
+        await router2._guide_first_use(msg("u3", "你好"))
+        check(len(channel.sent) == 1, "关闭开关后不发提示")
 
 
 async def main() -> None:
     test_webui_command()
     await test_webui_dispatch()
+    await test_first_use_guide()
 
     # ===== 一、固定路由不受两级改造影响 =====
     cfg = make_cfg(default_agent="chat1")

@@ -100,6 +100,10 @@ class Config:
     # ---- 安全 ----
     allowed_users: set[str] = field(default_factory=set)
 
+    # ---- 使用引导 ----
+    # 首次使用引导：用户第一次发消息时回一条简短指令说明（同一用户只发一次）
+    first_use_guide: bool = True
+
     # ---- 消息与心跳 ----
     stream_interval_sec: float = 1.0
     stream_chunk_size: int = 200
@@ -170,6 +174,11 @@ class Config:
                 self.channels.append("webui")
         else:
             self.channels = [c for c in self.channels if c != "webui"]
+
+    @property
+    def first_use_state_file(self) -> Path:
+        """首次引导已发送记录：记在项目根，重启后不会重复打扰同一用户。"""
+        return PROJECT_ROOT / ".first_use.json"
 
     @property
     def wake_handoff_file_resolved(self) -> Path:
@@ -243,6 +252,7 @@ HOT_PARSERS: dict[str, tuple[str, "object"]] = {
     # 安全与休眠
     "ALLOWED_USERS": ("allowed_users", lambda v: {u.strip() for u in v.split(",") if u.strip()}),
     "IDLE_EXIT_MIN": ("idle_exit_min", lambda v: float(v or 10)),
+    "FIRST_USE_GUIDE": ("first_use_guide", lambda v: v.lower() not in ("0", "false", "no")),
     # WAKE_REPLY 由看门狗独立进程读取，服务进程改 cfg 不影响，故不热生效
     # WorkBuddy（cwd / model / permission / timeout 每次任务读 cfg）
     "WORKBUDDY_CWD": ("workbuddy_cwd", lambda v: v or str(PROJECT_ROOT)),
@@ -346,6 +356,8 @@ def load_config(env_file: Path | None = None) -> Config:
         complexity_route=_env("COMPLEXITY_ROUTE").lower() in ("1", "true", "yes"),
         workspaces=_parse_workspaces(_env("WORKSPACES")),
         allowed_users={u.strip() for u in _env("ALLOWED_USERS").split(",") if u.strip()},
+        # 留空按开启处理：老 .env 没有这一项时也提供首次使用提示
+        first_use_guide=_env("FIRST_USE_GUIDE", "1").lower() not in ("0", "false", "no"),
         stream_interval_sec=float(_env("STREAM_INTERVAL_SEC") or 1.0),
         stream_chunk_size=int(_env("STREAM_CHUNK_SIZE") or 200),
         heartbeat_interval_sec=float(_env("HEARTBEAT_INTERVAL_SEC") or 30.0),
