@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import sys
 import time
@@ -20,6 +21,29 @@ from im_agent_gateway.plugins import load_agent, load_channel
 from im_agent_gateway.router.dispatcher import MessageRouter
 
 LOG_DIR = Path(__file__).parent / "logs"
+LOCK_FILE = LOG_DIR / "service.lock"
+
+
+def acquire_instance_lock():
+    """独占服务锁：同一时间只允许一个实例，避免同一机器人双连接互踢。
+
+    无窗口启动（桌面快捷方式）与手动启动都会经过这里。进程退出时由系统释放，
+    因此空闲自动退出后下次仍能正常启动。
+    """
+    LOG_DIR.mkdir(exist_ok=True)
+    handle = open(LOCK_FILE, "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
 
 
 def setup_logging(level: str) -> None:
@@ -107,6 +131,13 @@ async def amain() -> None:
     cfg = load_config()
     setup_logging(cfg.log_level)
     logger = logging.getLogger("main")
+
+    # 单实例守卫：快捷方式与手动启动共用同一把锁，第二实例直接退出
+    lock = acquire_instance_lock()
+    if lock is None:
+        logger.warning("已有服务实例在运行，本次启动退出（同一机器人双连接会互踢）")
+        return
+
     check_prereqs(cfg)
 
     # Agent 接入：按 .env 的 AGENTS 声明加载，实现 BaseAgent 并暴露 Agent 类即可接入

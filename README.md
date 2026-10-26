@@ -87,6 +87,10 @@ python main.py
 
 也可以双击 `run.bat`。日志同时输出到控制台与 `logs/im_agent_gateway.log`。
 
+不希望出现命令行窗口时，双击桌面上的「IM-Agent Gateway」快捷方式：它用 `pythonw.exe` 后台启动，日志同样写入 `logs/im_agent_gateway.log`；重复启动会被单实例锁挡住，不会与已有实例抢连接。
+
+首次运行 `run.bat` 时会在桌面创建一次「IM-Agent Gateway」快捷方式（带专用图标），之后不论它是否还在都不再创建或修改；需要强制重建时，双击 `create_shortcut.bat`，或执行 `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`。
+
 ### 3. 验证
 
 - 给机器人发一条单聊消息，应收到 Agent 回复。
