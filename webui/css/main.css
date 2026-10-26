@@ -258,6 +258,10 @@ body {
   transition: transform 0.3s var(--spring), box-shadow 0.3s var(--ease);
 }
 
+/* 卡片从 display:none 恢复显示会重播 pop-in，切换页签时内容会先下移 14px 再回落；
+   首屏播过一次后由 body.ready 关掉重播，页签之间来回切换不再跳动 */
+body.ready .card { animation: none; }
+
 /* 仅概览的卡片做悬浮抬升；日志 / 配置含表单，卡片整体位移会干扰输入 */
 .tab-panel[data-panel="overview"] .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
 

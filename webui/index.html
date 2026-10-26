@@ -158,6 +158,8 @@
   function switchTab(name) {
     if (name === currentTab) return;
     currentTab = name;
+    // 首屏入场动画已播完：之后切页签不再重播弹入，避免内容先在下方再回位
+    document.body.classList.add('ready');
     // 切换页签按钮高亮
     document.querySelectorAll('.tab').forEach((t) =>
       t.classList.toggle('current', t.dataset.tab === name));
