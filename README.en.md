@@ -90,7 +90,7 @@ You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gatew
 ### 3. Verify
 
 - Send a direct message to the bot and expect an agent reply.
-- Set `WEBUI_ENABLED=1` and open `http://127.0.0.1:8790` to view the console, or run `python manage.py webui` to open it in your default browser.
+- The web console is enabled by default: open `http://127.0.0.1:8790` for the admin console (set `WEBUI_ENABLED=0` to disable it), or run `python manage.py webui` to open it in your default browser.
 - In another terminal, run `python manage.py status` to confirm the service is online.
 
 ## Core Capabilities
@@ -221,7 +221,7 @@ Agent switching and toggling are provided by the platform. All other commands ar
 | `AGENTS` | Agents to load | `siliconflow,qoder,workbuddy,trae` |
 | `DEFAULT_AGENT` | Fallback agent when auto-routing is unavailable | `siliconflow` |
 | `AUTO_ROUTE` | Enable auto-routing | `1` |
-| `WEBUI_ENABLED` | Enable the web console | `0` |
+| `WEBUI_ENABLED` | Enable the web console | `1` |
 | `WATCH_ENABLED` | Master switch for wake-on-message | `0` |
 | `ALLOWED_USERS` | User allowlist; empty means unrestricted | empty |
 
@@ -255,11 +255,11 @@ The scheduled task starts the standby process with `pythonw.exe`, and starts the
 
 ## Web Console
 
-Disabled by default. When enabled, the browser behaves like a third IM and shares routing, allowlist, and queue behavior with bot messages.
+Enabled by default. When enabled, the browser behaves like a third IM and shares routing, allowlist, and queue behavior with bot messages.
 
 | Switch | Default | Description |
 | --- | --- | --- |
-| `WEBUI_ENABLED` | `0` | `1` = load the webui channel and serve the admin and chat consoles |
+| `WEBUI_ENABLED` | `1` | `1` = load the webui channel and serve the admin and chat consoles; `0` = do not load |
 | `WATCH_HTTP_ENABLED` | `0` | `1` = while the service sleeps, the standby process holds the port, serves the pages, and offers one-click wake (requires `WATCH_ENABLED=1`) |
 
 | Page | URL | Purpose |
@@ -267,7 +267,7 @@ Disabled by default. When enabled, the browser behaves like a third IM and share
 | Admin console | `http://127.0.0.1:8790` | Runtime status, channel connections, idle countdown, agent switches, tasks, logs, configuration |
 | Chat console | `http://127.0.0.1:8790/chat.html` | Chat with agents from the browser, with auto-routing, commands, memory, queues, and streaming |
 
-The webui channel and the sleep-state host share the port, so only one process uses it at a time. HTTP binds to `127.0.0.1` only. The chat console uses `WEBUI_USER_ID` (default `webui`), which must be included in `ALLOWED_USERS` when an allowlist is set.
+The webui channel and the sleep-state host share the port, so only one process uses it at a time. HTTP binds to `127.0.0.1` only; admin endpoints and the chat WebSocket require a session token generated at service start and validate Host / Origin, preventing arbitrary websites from calling the local API cross-site. The chat console uses `WEBUI_USER_ID` (default `webui`), which must be included in `ALLOWED_USERS` when an allowlist is set.
 
 If you do not know the console address, run `python manage.py webui`: when the page is reachable it opens the admin console in your default browser and prints the chat console URL; when the service is not running it tells you to start it first. On a remote terminal, `python manage.py webui --no-open` only prints the addresses. You can also send `/webui` in Feishu, WeCom, or any other IM conversation, and the bot replies with the admin and chat links.
 

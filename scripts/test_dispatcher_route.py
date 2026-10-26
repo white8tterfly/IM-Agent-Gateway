@@ -86,22 +86,22 @@ def test_webui_command() -> None:
     check("WEBUI_ENABLED 1" in out, "webui 指令：未开启时提示开启方式")
     check("/webui" in router._help_text(), "帮助文本包含 /webui")
 
-    # 通配绑定地址换回环地址，并提示跨设备访问需调整监听地址
+    # 通配绑定地址换回环地址，电脑端与手机端分开给出
     cfg2 = make_cfg()
     cfg2.webui_enabled = True
     cfg2.channels = ["webui"]
     cfg2.webui_host = "0.0.0.0"
     cfg2.webui_port = 8790
     out = MessageRouter(cfg2, AgentRegistry())._webui_text()
-    check("http://127.0.0.1:8790" in out and "/chat.html" in out,
-          "webui 指令：输出管理台与聊天台地址")
-    check("局域网 IP" in out, "webui 指令：本机地址模式提示跨设备访问方式")
+    check("电脑端 管理台：http://127.0.0.1:8790" in out, "webui 指令：电脑端管理台地址")
+    check("http://127.0.0.1:8790/chat.html" in out, "webui 指令：电脑端聊天台地址")
+    check("手机端" in out, "webui 指令：单独列出手机端地址")
 
-    # 显式监听局域网地址时按配置输出，不再加本机限制提示
+    # 显式监听局域网地址时按配置输出，电脑端与手机端同一地址
     cfg2.webui_host = "192.168.1.8"
     out = MessageRouter(cfg2, AgentRegistry())._webui_text()
-    check("http://192.168.1.8:8790" in out and "局域网 IP" not in out,
-          "webui 指令：监听局域网地址时直接输出该地址")
+    check("手机端 聊天台：http://192.168.1.8:8790/chat.html" in out,
+          "webui 指令：监听局域网地址时按配置输出手机端地址")
 
 
 class FakeChannel:

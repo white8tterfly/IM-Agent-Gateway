@@ -1,9 +1,41 @@
 // REST 接口封装与运行状态探测（在线 / 睡眠 / 离线 三态）
 // 后端端点见 im_agent_gateway/manage/api.py 与看门狗睡眠态托管
 
-// 通用 JSON 请求：非 2xx 或网络不可达时抛异常
+// 会话令牌：服务每次启动随机生成，页面通过同源 /api/session 获取。
+// 所有 /api 请求带 X-WebUI-Token，防止任意网页跨站调用本机管理端点。
+let sessionToken = null;
+
+// 获取令牌；force=true 强制刷新（服务重启后旧令牌失效）
+export async function getToken(force = false) {
+  if (!sessionToken || force) {
+    const resp = await fetch('/api/session', { cache: 'no-store' });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    sessionToken = data.token;
+  }
+  return sessionToken;
+}
+
+// 实际发送：/api 请求自动附带令牌；睡眠态托管没有令牌接口，拿不到就不带
+async function send(url, opts) {
+  const headers = new Headers(opts.headers || {});
+  if (url.startsWith('/api/')) {
+    try {
+      headers.set('X-WebUI-Token', await getToken());
+    } catch (_) { /* 服务不可达（睡眠态）时由探测逻辑判定 */ }
+  }
+  return fetch(url, { ...opts, headers, cache: 'no-store' });
+}
+
+// 通用 JSON 请求：非 2xx 或网络不可达时抛异常；403 先刷新令牌重试一次
 async function json(url, opts = {}) {
-  const resp = await fetch(url, opts);
+  let resp = await send(url, opts);
+  if (resp.status === 403) {
+    sessionToken = null;
+    resp = await send(url, opts);
+  }
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }

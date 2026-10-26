@@ -11,17 +11,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import uuid
+from ipaddress import ip_address
 from typing import ClassVar
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ...base import IMChannel, InboundMessage
 from ....config import Config
 
 logger = logging.getLogger(__name__)
+
+# 会话令牌头 / 查询参数名：前端 api.js、ws.js 与 manage.py 使用同一约定
+TOKEN_HEADER = "x-webui-token"
+TOKEN_QUERY = "token"
+
 
 
 class WebUIChannel(IMChannel):
@@ -43,12 +52,36 @@ class WebUIChannel(IMChannel):
         self._admin_mounted = False   # 管理端点幂等挂载标志
         self._static_mounted = False  # 静态目录幂等挂载标志
         self._exit = asyncio.Event()  # HTTP 启动失败时的挂起等待（close 解除）
+        # 本次进程的会话令牌：页面经同源 /api/session 获取，API 与 WS 均需携带，
+        # 防止任意网页跨站调用本机管理端点（服务重启后旧令牌自动失效）
+        self._token = secrets.token_urlsafe(32)
 
         self.app = FastAPI(title="IM-Agent Gateway 控制台")
+
+        @self.app.get("/api/session")
+        def session() -> JSONResponse:
+            """下发会话令牌：跨站页面受同源策略限制，无法读取本响应。"""
+            resp = JSONResponse({"token": self._token})
+            resp.headers["Cache-Control"] = "no-store"
+            return resp
+
+        @self.app.middleware("http")
+        async def guard_http(request, call_next):
+            """管理端点守卫：校验 Host 与令牌，仅 /api/session 免令牌。"""
+            path = request.url.path
+            if path.startswith("/api/"):
+                if not self._host_allowed(request.headers.get("host", "")):
+                    return JSONResponse({"ok": False, "error": "禁止的访问来源"}, status_code=403)
+                if path != "/api/session" and not self._token_ok(request.headers.get(TOKEN_HEADER)):
+                    return JSONResponse({"ok": False, "error": "会话令牌缺失或失效"}, status_code=403)
+            return await call_next(request)
 
         @self.app.websocket("/ws/chat")
         async def ws_chat(ws: WebSocket) -> None:
             """聊天端点：接收浏览器报文，归一化后上抛路由；回复经 send_* 推回。"""
+            if not self._ws_allowed(ws):
+                await ws.close(code=1008)  # 未通过令牌 / Origin 校验：拒绝握手
+                return
             await ws.accept()
             token = uuid.uuid4().hex
             self._conns[token] = ws
@@ -79,6 +112,58 @@ class WebUIChannel(IMChannel):
                 pass  # 客户端断开或重复断开，走下面统一摘除
             finally:
                 self._conns.pop(token, None)
+
+    # ---------- 安全防护 ----------
+
+    @staticmethod
+    def _host_only(hostport: str) -> str:
+        """从 Host / Origin 中取出主机名（兼容 hostname、IPv4 与带方括号的 IPv6）。"""
+        value = hostport.strip().lower()
+        if value.startswith("["):
+            end = value.find("]")
+            return value[1:end] if end != -1 else value
+        if value.count(":") > 1:
+            return value
+        return value.rsplit(":", 1)[0] if ":" in value else value
+
+    def _host_allowed(self, hostport: str) -> bool:
+        """只接受回环地址、显式绑定的主机，或通配绑定下的局域网 IP。
+
+        通配绑定（0.0.0.0 / ::）时拒绝任意域名，避免 DNS rebinding 把攻击者域名
+        解析到本机后读取管理端点。
+        """
+        host = self._host_only(hostport)
+        if not host:
+            return False
+        if host in ("127.0.0.1", "localhost", "::1"):
+            return True
+        configured = self.host.strip().lower()
+        if configured and configured not in ("0.0.0.0", "::"):
+            return host == configured
+        try:
+            addr = ip_address(host)
+        except ValueError:
+            return False
+        return addr.is_loopback or addr.is_private
+
+    def _origin_allowed(self, origin: str) -> bool:
+        """浏览器 Origin 必须是 http(s) 且主机在允许范围内。"""
+        parsed = urlsplit(origin)
+        return parsed.scheme in ("http", "https") and self._host_allowed(parsed.hostname or "")
+
+    def _token_ok(self, token: str | None) -> bool:
+        return bool(token) and secrets.compare_digest(token, self._token)
+
+    def _ws_allowed(self, ws: WebSocket) -> bool:
+        """WS 握手校验：必须携带有效令牌；浏览器来源还需 Origin 合法。
+
+        令牌用于挡住跨站 WebSocket 劫持（CSWSH）：攻击者页面既拿不到令牌，
+        Origin 也不是本机地址。
+        """
+        if not self._token_ok(ws.query_params.get(TOKEN_QUERY)):
+            return False
+        origin = ws.headers.get("origin", "")
+        return not origin or self._origin_allowed(origin)
 
     # ---------- 生命周期 ----------
 
