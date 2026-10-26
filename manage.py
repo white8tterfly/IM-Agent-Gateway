@@ -26,6 +26,9 @@ OFFLINE_TIP = (
     "可给机器人发条消息唤醒服务，或在服务所在电脑上执行 python main.py。"
 )
 
+# 管理端点会话令牌头：服务启动时随机生成，CLI 先经同源 /api/session 获取再携带
+TOKEN_HEADER = "X-WebUI-Token"
+
 # 智能体用途与复杂度档位的中文展示名（agents 列表输出用）
 KIND_CN = {"chat": "对话", "coding": "编码", "office": "办公"}
 LEVEL_CN = {"simple": "简单", "mid": "中等", "complex": "复杂"}
@@ -127,7 +130,16 @@ def _fetch(cfg: Config, path: str, transport=None, method: str = "GET",
     """打管理端点；网络不可达或响应不是 JSON 时抛 httpx.HTTPError，由调用方统一提示。"""
     with httpx.Client(base_url=f"http://{cfg.webui_host}:{cfg.webui_port}",
                       transport=transport, timeout=3.0) as c:
-        resp = c.request(method, path, json=json_body)
+        headers: dict[str, str] = {}
+        try:
+            # 本地 CLI 同样需要会话令牌；拿不到（睡眠态托管 / 未开启）就不带，
+            # 让后续请求按不可达或 403 走统一提示
+            token_resp = c.get("/api/session")
+            if token_resp.status_code == 200:
+                headers[TOKEN_HEADER] = str(token_resp.json().get("token") or "")
+        except (httpx.HTTPError, ValueError):
+            pass
+        resp = c.request(method, path, json=json_body, headers=headers)
     try:
         return resp.json()
     except ValueError as exc:

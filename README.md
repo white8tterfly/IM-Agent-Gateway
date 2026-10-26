@@ -90,7 +90,7 @@ python main.py
 ### 3. 验证
 
 - 给机器人发一条单聊消息，应收到 Agent 回复。
-- 设置 `WEBUI_ENABLED=1` 后访问 `http://127.0.0.1:8790`，打开管理台；也可以执行 `python manage.py webui` 自动打开浏览器。
+- Web 控制台默认开启，访问 `http://127.0.0.1:8790` 打开管理台（设 `WEBUI_ENABLED=0` 可关闭）；也可以执行 `python manage.py webui` 自动打开浏览器。
 - 另开终端执行 `python manage.py status`，确认服务在线。
 
 ## 核心能力
@@ -221,7 +221,7 @@ python main.py
 | `AGENTS` | 加载哪些 Agent | `siliconflow,qoder,workbuddy,trae` |
 | `DEFAULT_AGENT` | 自动路由不可用时的默认 Agent | `siliconflow` |
 | `AUTO_ROUTE` | 是否开启自动路由 | `1` |
-| `WEBUI_ENABLED` | 是否接入 Web 控制台 | `0` |
+| `WEBUI_ENABLED` | 是否接入 Web 控制台 | `1` |
 | `WATCH_ENABLED` | 消息唤醒总开关 | `0` |
 | `ALLOWED_USERS` | 允许使用机器人的用户白名单，留空不限制 | 空 |
 
@@ -255,11 +255,11 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 
 ## Web 控制台
 
-默认关闭。开启后浏览器相当于第三个 IM，与机器人消息共享同一套路由、白名单与队列机制。
+默认开启。开启后浏览器相当于第三个 IM，与机器人消息共享同一套路由、白名单与队列机制。
 
 | 开关 | 默认 | 说明 |
 | --- | --- | --- |
-| `WEBUI_ENABLED` | `0` | `1` = 接入 webui 通道，提供管理台与聊天台 |
+| `WEBUI_ENABLED` | `1` | `1` = 接入 webui 通道，提供管理台与聊天台；`0` = 不接入 |
 | `WATCH_HTTP_ENABLED` | `0` | `1` = 服务睡眠期间由待命进程占住端口托管页面，并提供一键唤醒（需 `WATCH_ENABLED=1`） |
 
 | 页面 | 地址 | 用途 |
@@ -267,7 +267,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 | 管理台 | `http://127.0.0.1:8790` | 运行状态、通道连接、空闲倒计时、Agent 开关、任务、日志、配置查看与修改 |
 | 聊天台 | `http://127.0.0.1:8790/chat.html` | 浏览器直连 Agent，支持自动路由、指令、会话记忆、排队与流式回复 |
 
-端口由服务的 webui 通道与睡眠态托管共用，任一时刻只有一个进程占用。HTTP 仅绑定 `127.0.0.1`。聊天台身份为 `WEBUI_USER_ID`（默认 `webui`），设置 `ALLOWED_USERS` 白名单时需包含它。
+端口由服务的 webui 通道与睡眠态托管共用，任一时刻只有一个进程占用。HTTP 仅绑定 `127.0.0.1`；管理端点与聊天 WebSocket 需携带服务启动时生成的会话令牌，并校验 Host / Origin，防止任意网页跨站调用本机接口。聊天台身份为 `WEBUI_USER_ID`（默认 `webui`），设置 `ALLOWED_USERS` 白名单时需包含它。
 
 不知道页面地址时，执行 `python manage.py webui` 即可：页面可达会用默认浏览器打开管理台并打印聊天台地址，服务未运行会提示先启动；远程终端可用 `python manage.py webui --no-open` 只输出地址。也可以直接在飞书、企微等对话里发送 `/webui`，机器人会回复管理台与聊天台链接。
 

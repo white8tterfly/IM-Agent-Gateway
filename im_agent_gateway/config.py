@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,6 +21,17 @@ PARENT_ENV_FILE = PROJECT_ROOT.parent / ".env"
 VALID_AGENT_KINDS = ("chat", "coding", "office")
 # 复杂度档位合法值（AGENT_COMPLEXITY 的 value 白名单，固定三档）
 VALID_COMPLEXITY = ("simple", "mid", "complex")
+
+
+def _lan_ip() -> str:
+    """探测本机局域网 IPv4：UDP 连接只查路由不发包，无网络时返回空串。"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+    except OSError:
+        return ""
+    return "" if ip.startswith("127.") else ip
 
 
 @dataclass
@@ -109,7 +121,7 @@ class Config:
     watch_http_enabled: bool = False  # 睡眠态托管开关：睡眠期间占住 webui 端口提供页面与唤醒按钮
 
     # ---- Web 控制台（webui 通道）----
-    webui_enabled: bool = False    # webui 通道接入开关：开启时自动并入 CHANNELS 声明
+    webui_enabled: bool = True     # webui 通道接入开关：开启时自动并入 CHANNELS 声明（默认开启）
     webui_host: str = "127.0.0.1"  # HTTP 绑定地址（默认仅本机可达）
     webui_port: int = 8790         # webui / 睡眠态托管共用端口
     webui_user_id: str = "webui"   # 浏览器会话的 user_id（参与 ALLOWED_USERS 白名单校验）
@@ -129,6 +141,24 @@ class Config:
         if self.webui_static:
             return Path(self.webui_static).expanduser()
         return PROJECT_ROOT / "webui"
+
+    @property
+    def webui_urls(self) -> tuple[str, str]:
+        """(电脑端地址, 手机端地址)：手机端用局域网 IP，探测不到时为空串。"""
+        port = self.webui_port
+        host = (self.webui_host or "").strip()
+        if host in ("", "0.0.0.0", "::"):
+            host = "127.0.0.1"
+        elif host not in ("127.0.0.1", "localhost", "::1"):
+            # 已显式绑定某个可访问地址：电脑端与手机端都用它
+            return f"http://{host}:{port}", f"http://{host}:{port}"
+        ip = _lan_ip()
+        return f"http://{host}:{port}", (f"http://{ip}:{port}" if ip else "")
+
+    @property
+    def webui_local_only(self) -> bool:
+        """是否只监听回环地址：手机或其他电脑无法直接访问。"""
+        return (self.webui_host or "").strip() in ("127.0.0.1", "localhost", "::1")
 
     def apply_webui_switch(self) -> None:
         """把 WEBUI_ENABLED 开关收敛到 CHANNELS 声明：开 = 自动并入，关 = 从声明剔除。
@@ -329,7 +359,8 @@ def load_config(env_file: Path | None = None) -> Config:
         service_cmd=_env("SERVICE_CMD") or "python main.py",
         wake_handoff_file=_env("WAKE_HANDOFF_FILE") or ".wake_pending.json",
         watch_http_enabled=_env("WATCH_HTTP_ENABLED").lower() in ("1", "true", "yes"),
-        webui_enabled=_env("WEBUI_ENABLED").lower() in ("1", "true", "yes"),
+        # 留空按开启处理：老 .env 没有这一项时默认提供 Web 控制台
+        webui_enabled=_env("WEBUI_ENABLED", "1").lower() not in ("0", "false", "no"),
         webui_host=_env("WEBUI_HOST") or "127.0.0.1",
         webui_port=int(_env("WEBUI_PORT") or 8790),
         webui_user_id=_env("WEBUI_USER_ID") or "webui",

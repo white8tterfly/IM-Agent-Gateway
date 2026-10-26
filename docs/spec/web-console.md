@@ -10,7 +10,8 @@
 
 - 平台通用：聊天台作为普通 IM 通道接入（实现 `IMChannel` + `CHANNELS` 声明），路由 / 白名单 / 会话队列 / 流式回复全部复用现有机制，平台核心不出现 UI 专属分支。
 - 轻量：不引入 Node 构建链，前端为原生 ES modules 静态文件；新增依赖仅 fastapi + uvicorn。
-- 向后兼容：所有新能力默认关闭，`WEBUI_ENABLED=0` 时行为与现状完全一致。
+- 默认启用：`WEBUI_ENABLED` 默认 `1`，仅绑定回环地址，并对管理端点与聊天 WebSocket 校验会话令牌、Host 与 Origin；设为 `0` 时不加载 webui 通道、不新增监听端口。
+- 安全防护：服务启动时生成进程内会话令牌，页面经同源 `/api/session` 获取；`/api/*` 需携带 `X-WebUI-Token`，WS 握手需携带 `?token=`，并校验 Origin 为回环 / 已绑定主机；通配绑定时拒绝任意域名，防 DNS rebinding。
 
 ## 2. 术语
 
@@ -37,7 +38,7 @@
 
 | 开关 | 默认 | 关闭 | 开启 |
 | --- | --- | --- | --- |
-| `WEBUI_ENABLED` | `0` | webui 通道不注册（与其他通道一致：不声明即不接入） | 加入 `CHANNELS` 后提供管理台 + 聊天台 |
+| `WEBUI_ENABLED` | `1` | 不加载 webui 通道（不新增监听端口，行为与未接入控制台时一致） | 加入 `CHANNELS` 后提供管理台 + 聊天台 |
 | `WATCH_HTTP_ENABLED` | `0` | 看门狗不做睡眠态托管（睡眠时页面不可达，现状行为） | 睡眠期间托管静态页 + 状态 + 唤醒按钮 |
 
 ## 4. 设计
@@ -120,14 +121,14 @@ manage/
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `WEBUI_ENABLED` | `0` | webui 通道接入开关（配合 `CHANNELS` 声明） |
+| `WEBUI_ENABLED` | `1` | webui 通道接入开关（配合 `CHANNELS` 声明） |
 | `WEBUI_HOST` | `127.0.0.1` | HTTP 绑定地址（默认仅本机） |
 | `WEBUI_PORT` | `8790` | webui / 托管共用端口 |
 | `WEBUI_USER_ID` | `webui` | 浏览器会话的 user_id（参与 `ALLOWED_USERS` 白名单校验） |
 | `WATCH_HTTP_ENABLED` | `0` | 看门狗睡眠态托管开关 |
 | `WEBUI_STATIC` | 包内 webui static 路径 | 睡眠态托管服务的静态目录 |
 
-默认值全部为关闭态：升级后不影响任何现有行为。
+`WEBUI_ENABLED` 默认开启，其余睡眠态托管开关默认关闭；不需要控制台时设 `WEBUI_ENABLED=0`，升级后行为与未接入时一致。
 
 ## 6. 接口契约变更
 
@@ -149,15 +150,15 @@ manage/
 
 ## 8. 运行约束与边界
 
-- 安全：HTTP 仅绑 `127.0.0.1`；聊天走 `ALLOWED_USERS` 白名单（需包含 `webui`，为空则全放行，与 IM 同口径）；不做登录鉴权（本机单用户场景）。
+- 安全：HTTP 仅绑 `127.0.0.1`；管理端点需会话令牌（`X-WebUI-Token`），聊天 WebSocket 需 `?token=` 并通过 Origin 校验；Host 仅接受回环、显式绑定主机或通配绑定下的局域网 IP，拒绝任意域名（防 DNS rebinding）。聊天仍走 `ALLOWED_USERS` 白名单（需包含 `webui`，为空则全放行，与 IM 同口径）。
 - 端口独占：`WEBUI_PORT` 在服务与看门狗托管之间交接；用户手动同时跑服务与看门狗时的端口冲突表现与现有长连接互踢一致（以日志提示为准）。
 - 交棒边界：webui 消息不参与看门狗交棒重放（睡眠态页面只提供唤醒，不提供聊天输入）。
 - 配置写回并发：开关操作为单进程串行事件；`os.replace` 原子写保证 CLI 与服务同时写 `.env` 时不会产生半截文件（最后写入者胜出）。
-- `WEBUI_ENABLED=0` 或 `WATCH_HTTP_ENABLED=0` 时不新增任何监听端口。
+- `WEBUI_ENABLED=0` 时不新增监听端口；`WATCH_HTTP_ENABLED=0` 时睡眠期间不新增监听端口。
 
 ## 9. 验收标准
 
-- A1：全部默认关闭时，启动行为、日志、端口占用与现状完全一致。
+- A1：`WEBUI_ENABLED=0` 时，启动行为、日志、端口占用与未接入控制台时完全一致。
 - A2：`CHANNELS` 声明 `webui` 后，浏览器聊天全链路可用：WS 消息 → 归一化 → 路由（自动路由与指令均生效）→ 流式回传渲染。
 - A3：Agent 开关在 IM `/agent on|off`、UI、CLI 三入口行为一致，且写回 `.env`，重启后保持。
 - A4：`/api/config` 与 CLI `config show` 对 key/secret/token 类值脱敏。

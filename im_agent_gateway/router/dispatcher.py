@@ -121,20 +121,23 @@ class MessageRouter:
         return "\n".join(lines)
 
     def _webui_text(self) -> str:
-        """返回 Web 控制台地址；默认仅绑定本机，跨设备访问需调整监听地址。"""
+        """返回 Web 控制台地址：电脑端与手机端分开列出。"""
         if not self.cfg.webui_enabled and "webui" not in self.cfg.channels:
             return ("Web 控制台未开启。\n"
                     "管理员可在服务所在电脑执行：python manage.py config set WEBUI_ENABLED 1\n"
                     "然后重启服务，再发送 /webui。")
 
-        host = self.cfg.webui_host
-        if host in ("", "0.0.0.0", "::"):
-            host = "127.0.0.1"
-        base = f"http://{host}:{self.cfg.webui_port}"
-        lines = ["Web 控制台", f"管理台：{base}", f"聊天台：{base}/chat.html"]
-        if host in ("127.0.0.1", "localhost"):
-            lines.append("提示：该地址只绑定服务所在电脑，手机或其他电脑访问需把 WEBUI_HOST "
-                         "改为 0.0.0.0 并重启服务，再用本机局域网 IP 打开。")
+        pc, lan = self.cfg.webui_urls
+        lines = ["Web 控制台",
+                 f"电脑端 管理台：{pc}",
+                 f"电脑端 聊天台：{pc}/chat.html"]
+        if lan:
+            lines.append(f"手机端 管理台：{lan}")
+            lines.append(f"手机端 聊天台：{lan}/chat.html")
+            if self.cfg.webui_local_only:
+                lines.append("（手机端访问需把 WEBUI_HOST 改为 0.0.0.0 并重启服务）")
+        else:
+            lines.append("手机端 未获取到局域网 IP，请用本机局域网 IP 访问")
         return "\n".join(lines)
 
     # ---------- 通道回调 ----------

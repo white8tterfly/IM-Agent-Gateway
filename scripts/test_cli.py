@@ -148,6 +148,7 @@ def test_online() -> None:
 def test_webui() -> None:
     # 未开启 webui 通道时给出开启方式，不尝试打开浏览器
     cfg = base_cfg()
+    cfg.webui_enabled = False
     out = manage.cmd_webui(cfg, opener=None)
     check("WEBUI_ENABLED 1" in out, "webui 未开启时提示开启命令")
 

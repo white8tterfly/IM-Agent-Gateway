@@ -1,6 +1,8 @@
 // 聊天 WebSocket 封装：自动重连（指数退避）+ 连接状态回调
 // 帧格式见 webui 通道：发送 {"type":"text","content":...}，
 // 接收 {"type":"text"} / {"type":"stream","id","content","finish"}
+// 握手需携带会话令牌（?token=），由 api.js 的同源令牌接口获取
+import { getToken } from './api.js';
 
 // 创建聊天连接
 // onFrame(frame)：收到一帧 JSON
@@ -11,9 +13,16 @@ export function createChatSocket({ onFrame, onState }) {
   let retry = 0;          // 重连次数（指数退避基数）
   let timer = null;       // 重连定时器
 
-  function connect() {
+  async function connect() {
+    // 每次重连都刷新令牌：服务重启后旧令牌失效
+    let query = '';
+    try {
+      query = `?token=${encodeURIComponent(await getToken(true))}`;
+    } catch (_) { /* 睡眠态：不带令牌，连接失败后按退避重试 */ }
+    if (closed) return;   // 取令牌期间已主动关闭
+
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+    ws = new WebSocket(`${proto}://${location.host}/ws/chat${query}`);
 
     ws.onopen = () => {
       retry = 0;

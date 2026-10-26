@@ -86,7 +86,7 @@ CONFIG_META: list[ConfigItem] = [
         advanced=False),
     ConfigItem(
         "WEBUI_ENABLED", "webui_enabled", "网页控制台开关",
-        "开启后可以在浏览器里使用管理台与聊天台",
+        "开启后可以在浏览器里使用管理台与聊天台（默认开启）",
         type="bool", advanced=False),
 
     # ---------- 高级设置：通道凭证与细节 ----------

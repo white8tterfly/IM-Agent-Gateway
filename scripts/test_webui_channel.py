@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from im_agent_gateway.agents.base import AgentResult, BaseAgent
 from im_agent_gateway.agents.registry import AgentRegistry
@@ -87,14 +88,26 @@ async def main() -> None:
         # 管理端点注入 → 静态挂载（与 main.py 真实时序一致：显式路由先于根路径 mount）
         channel.mount_admin(create_router(service))
         channel.mount_static()
-        client = TestClient(channel.app)
+        client = TestClient(channel.app, base_url="http://127.0.0.1")
+        token = client.get("/api/session").json()["token"]
+        auth = {"X-WebUI-Token": token}
 
         # ---------- 管理端点注入与静态托管 ----------
-        r = client.get("/api/status")
+        r = client.get("/api/status", headers=auth)
         check(r.status_code == 200 and r.json()["state"] == "running", "管理端点注入后可访问")
         channel.mount_admin(create_router(service))  # 幂等：重复注入无副作用
-        r = client.get("/api/status")
+        r = client.get("/api/status", headers=auth)
         check(r.status_code == 200, "mount_admin 幂等")
+
+        # ---------- 安全防护：令牌与 Host ----------
+        check(client.get("/api/session").status_code == 200, "/api/session 免令牌可访问")
+        check(client.get("/api/session").headers.get("cache-control") == "no-store",
+              "会话令牌响应禁止缓存")
+        check(client.get("/api/status").status_code == 403, "管理端点缺少令牌时拒绝")
+        check(client.get("/api/status", headers={"X-WebUI-Token": "bad"}).status_code == 403,
+              "管理端点令牌错误时拒绝")
+        hostile = TestClient(channel.app, base_url="http://evil.example")
+        check(hostile.get("/api/session").status_code == 403, "非本机 Host 拒绝访问")
 
         r = client.get("/")
         check(r.status_code == 200 and "IM-Agent Gateway" in r.text, "静态根路径托管")
@@ -110,7 +123,22 @@ async def main() -> None:
             received.append(msg)
 
         channel.on_message = collect
-        with client.websocket_connect("/ws/chat") as ws:
+        ws_path = f"/ws/chat?token={token}"
+        # 握手防护：无令牌 / 跨站 Origin 一律拒绝
+        try:
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.receive_json()
+            check(False, "WS 无令牌应拒绝握手")
+        except WebSocketDisconnect:
+            check(True, "WS 无令牌拒绝握手")
+        try:
+            with client.websocket_connect(ws_path, headers={"origin": "http://evil.example"}) as ws:
+                ws.receive_json()
+            check(False, "WS 跨站 Origin 应拒绝握手")
+        except WebSocketDisconnect:
+            check(True, "WS 跨站 Origin 拒绝握手")
+
+        with client.websocket_connect(ws_path) as ws:
             ws.send_json({"type": "text", "content": "你好"})
             # 无效帧被忽略，不影响后续消息
             ws.send_json({"type": "ping"})
@@ -126,7 +154,7 @@ async def main() -> None:
 
         # ---------- WS 聊天：全链路（路由 → 流式回传） ----------
         channel.on_message = router.handle_msg
-        with client.websocket_connect("/ws/chat") as ws:
+        with client.websocket_connect(ws_path) as ws:
             ws.send_json({"type": "text", "content": "写个冒泡排序"})
             first = ws.receive_json()
             check(first["type"] == "stream" and first["finish"] is False, "首帧为流式帧")
@@ -143,15 +171,15 @@ async def main() -> None:
             check("fake-model" in frame["content"], "流式内容含模型与用量摘要")
 
         # ---------- WS 聊天：send_text 推送（指令回复） ----------
-        with client.websocket_connect("/ws/chat") as ws:
+        with client.websocket_connect(ws_path) as ws:
             ws.send_json({"type": "text", "content": "/help"})
             frame = ws.receive_json()
         check(frame["type"] == "text" and "指令帮助" in frame["content"], "send_text 回推指令帮助")
 
         # ---------- close：断开全部连接且幂等 ----------
-        ws1 = client.websocket_connect("/ws/chat")
+        ws1 = client.websocket_connect(ws_path)
         ws1.__enter__()
-        ws2 = client.websocket_connect("/ws/chat")
+        ws2 = client.websocket_connect(ws_path)
         ws2.__enter__()
         await wait_until(lambda: channel.open_connections == 2)
         check(channel.open_connections == 2, "两个连接登记在册")
@@ -177,6 +205,8 @@ async def main() -> None:
     cfg3.channels = ["webui", "feishu"]
     cfg3.apply_webui_switch()
     check(cfg3.channels == ["feishu"], "关闭开关从声明中剔除 webui")
+
+    check(Config(bot_id="", secret="").webui_enabled is True, "WEBUI_ENABLED 默认开启")
 
     print("\n全部通过")
 
