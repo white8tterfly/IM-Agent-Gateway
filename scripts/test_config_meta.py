@@ -48,13 +48,13 @@ def main() -> None:
         "AGENTS", "ENABLED_AGENTS", "DEFAULT_AGENT", "AUTO_ROUTE", "JEV_ROUTE",
         "AGENT_KINDS", "AGENT_COMPLEXITY", "COMPLEXITY_ROUTE", "ALLOWED_USERS",
         "IDLE_EXIT", "IDLE_EXIT_MIN", "WAKE_REPLY", "WATCH_AUTOSTART",
-        "WORKBUDDY_CWD", "WEBUI_ENABLED", "CHANNELS",
-    ], "常用配置 16 项前置（其余全部为高级）")
+        "WORKBUDDY_CWD", "WEBUI_ENABLED", "FIRST_USE_GUIDE", "CHANNELS",
+    ], "常用配置 17 项前置（其余全部为高级）")
     bool_keys = {it.key for it in meta if it.type == "bool"}
     check(bool_keys == {
         "AUTO_ROUTE", "JEV_ROUTE", "COMPLEXITY_ROUTE", "IDLE_EXIT",
         "SF_INCLUDE_REASONING", "WATCH_ENABLED", "WATCH_AUTOSTART",
-        "WATCH_HTTP_ENABLED", "WEBUI_ENABLED",
+        "WATCH_HTTP_ENABLED", "WEBUI_ENABLED", "FIRST_USE_GUIDE",
     }, "布尔开关项集合正确（页面渲染成开关）")
 
     # ===== 四、分组视图：分组、脱敏、值格式化 =====

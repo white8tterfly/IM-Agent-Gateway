@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import tempfile
 import time
 import uuid
 from typing import Callable
@@ -95,6 +98,9 @@ class MessageRouter:
         self.keyword = KeywordRouter()
         self._last_activity = time.monotonic()  # 最近一次消息/任务结束时刻（空闲判定）
         self._inflight = 0                      # 正在执行的任务数
+        # 已发过首次引导的用户（im:user_id），落在项目根文件里，重启后不重复打扰
+        self._guide_state_file = cfg.first_use_state_file
+        self._guided = self._load_guided()
 
     # ---------- 帮助文本 ----------
 
@@ -119,6 +125,54 @@ class MessageRouter:
             lines.append(f"【{agent.label}】")
             lines.extend(f"{c.usage:<20}{c.brief}" for c in cmds)
         return "\n".join(lines)
+
+    def _first_use_text(self) -> str:
+        """首次使用的简短引导：只列常用指令，完整清单交给 /help。"""
+        return "\n".join([
+            "初次使用提示（只提示这一次）",
+            "直接发消息即可，我会自动挑选合适的 Agent 执行任务。",
+            "",
+            "/help              查看全部指令",
+            "/status            查看服务状态",
+            "/agent <名称>       固定 Agent（/agent auto 恢复自动路由）",
+            "/reset             清空当前会话记忆",
+            "/stop              终止正在执行的任务",
+            "/webui             获取 Web 控制台地址",
+        ])
+
+    def _load_guided(self) -> set[str]:
+        try:
+            data = json.loads(self._guide_state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return set()
+        users = data.get("users") if isinstance(data, dict) else None
+        return {str(u) for u in users} if isinstance(users, list) else set()
+
+    def _save_guided(self) -> None:
+        """原子写回：先落临时文件再替换，避免异常退出留下半个文件。"""
+        path = self._guide_state_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump({"version": 1, "users": sorted(self._guided)}, fh, ensure_ascii=False)
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.warning("首次引导记录写入失败：%s", exc)
+
+    async def _guide_first_use(self, msg: InboundMessage) -> None:
+        """用户第一次发消息时先回一条使用说明；同一用户只发一次，重启后仍记得。"""
+        if not self.cfg.first_use_guide:
+            return
+        key = f"{msg.im}:{msg.user_id}"
+        if key in self._guided:
+            return
+        self._guided.add(key)
+        self._save_guided()
+        # 直接用指令的人说明已经会用了，只记录不打扰
+        if msg.content.startswith("/"):
+            return
+        await msg.channel.send_text(msg, self._first_use_text())
 
     def _webui_text(self) -> str:
         """返回 Web 控制台地址：电脑端与手机端分开列出。"""
@@ -157,6 +211,7 @@ class MessageRouter:
             return
 
         chat_key = f"g:{msg.chat_id}" if msg.chat_type == "group" and msg.chat_id else f"s:{msg.user_id}"
+        await self._guide_first_use(msg)
 
         if msg.content.startswith("/"):
             await self._handle_command(chat_key, msg, msg.content)

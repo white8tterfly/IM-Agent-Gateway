@@ -89,6 +89,8 @@ python main.py
 
 双击桌面上的「IM-Agent Gateway」快捷方式会弹出启动窗口：服务在后台无窗口运行，就绪后自动打开 Web 控制台（开启时）并关闭窗口；启动失败或已有实例在运行时会在窗口里直接说明原因。日志同样写入 `logs/im_agent_gateway.log`。
 
+服务运行时任务栏右下角会出现「IM-Agent Gateway」托盘图标：右键可打开 Web 控制台或聊天台，选择「退出服务」即可优雅关闭（等同 `Ctrl+C`，会先断开各 IM 连接）。托盘依赖 `pystray`，缺失时服务照常启动，只是没有图标。
+
 首次运行 `run.bat` 时会在桌面创建一次「IM-Agent Gateway」快捷方式（带专用图标），之后不论它是否还在都不再创建或修改。需要按最新参数重建时，双击 `create_shortcut.bat`，或执行 `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`。
 
 ### 3. 验证
@@ -151,6 +153,8 @@ python main.py
 | Agent 特有指令 | 由各 Agent 提供（如 `/cd`、`/ws`、`/model`、`/stop`、`/reset`），消息路由到谁就由谁处理 |
 
 切换与开关 Agent 的命令由平台提供，其余指令由各 Agent 自行声明；不支持的指令会提示未知命令。
+
+每个用户第一次发消息时会自动收到一条常用指令提示（同一用户只发一次，记录在 `.first_use.json`），设 `FIRST_USE_GUIDE=0` 可关闭。
 
 ## 接入 IM 通道
 
@@ -226,6 +230,7 @@ python main.py
 | `DEFAULT_AGENT` | 自动路由不可用时的默认 Agent | `siliconflow` |
 | `AUTO_ROUTE` | 是否开启自动路由 | `1` |
 | `WEBUI_ENABLED` | 是否接入 Web 控制台 | `1` |
+| `FIRST_USE_GUIDE` | 首次发消息时是否回一条常用指令提示 | `1` |
 | `WATCH_ENABLED` | 消息唤醒总开关 | `0` |
 | `ALLOWED_USERS` | 允许使用机器人的用户白名单，留空不限制 | 空 |
 

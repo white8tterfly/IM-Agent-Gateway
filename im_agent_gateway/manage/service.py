@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections import deque
 from dataclasses import fields
@@ -102,14 +103,34 @@ class ManageService:
         router: MessageRouter,
         gateway: Gateway | None = None,
         log_file: Path | None = None,
+        shutdown_event: asyncio.Event | None = None,
     ) -> None:
         self.cfg = cfg
         self.registry = registry
         self.router = router
         self.gateway = gateway
         self.log_file = Path(log_file) if log_file is not None else DEFAULT_LOG_FILE
+        # 退出信号：main 创建并等待，管理台 / 托盘可请求优雅关闭
+        self._shutdown_event = shutdown_event
+        # 记录事件循环：管理端点在 FastAPI 线程池里执行，跨线程触发必须走 loop 线程安全接口
+        try:
+            self._loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
         # 最近任务环形缓冲：路由层任务结束时经 on_task_event 上报
         self._recent: deque[dict] = deque(maxlen=RECENT_TASKS)
+
+    def request_shutdown(self, delay: float = 0.5) -> bool:
+        """请求优雅退出；delay 留出时间把 HTTP 响应发回客户端。"""
+        if self._shutdown_event is None:
+            return False
+        if self._loop is None or not self._loop.is_running():
+            self._shutdown_event.set()
+        else:
+            self._loop.call_soon_threadsafe(
+                self._loop.call_later, delay, self._shutdown_event.set
+            )
+        return True
 
     # ---------- 任务事件 ----------
 

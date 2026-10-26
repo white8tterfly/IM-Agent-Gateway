@@ -79,6 +79,9 @@ async def main() -> None:
         registry = AgentRegistry()
         registry.register(FakeAgent("alpha", "模拟助手"), active=True)
         router = MessageRouter(cfg, registry)
+        # 首次引导状态落到临时目录，避免读写项目根文件、保证每次运行行为一致
+        router._guide_state_file = Path(td) / ".first_use.json"
+        router._guided = router._load_guided()
         service = ManageService(cfg, registry, router, gateway=None,
                                 log_file=Path(td) / "run.log")
 
@@ -157,7 +160,10 @@ async def main() -> None:
         with client.websocket_connect(ws_path) as ws:
             ws.send_json({"type": "text", "content": "写个冒泡排序"})
             first = ws.receive_json()
-            check(first["type"] == "stream" and first["finish"] is False, "首帧为流式帧")
+            check(first["type"] == "text" and "初次使用提示" in first["content"],
+                  "首次消息先收到使用提示")
+            first = ws.receive_json()
+            check(first["type"] == "stream" and first["finish"] is False, "随后首帧为流式帧")
             frames = 1
             while True:
                 frame = ws.receive_json()

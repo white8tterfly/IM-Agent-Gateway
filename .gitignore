@@ -10,6 +10,7 @@ venv/
 # 运行时文件
 logs/
 status
+.first_use.json
 
 # 发布打包产物
 dist/

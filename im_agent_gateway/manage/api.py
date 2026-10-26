@@ -90,4 +90,9 @@ def create_router(service: ManageService) -> APIRouter:
             logging.getLogger().setLevel(service.cfg.log_level)
         return {"ok": True, "error": None, "hot": hot}
 
+    @api.post("/api/shutdown")
+    def shutdown() -> dict:
+        """退出服务：管理台调用后优雅关闭网关与各 Agent（需要会话令牌）。"""
+        return {"ok": service.request_shutdown()}
+
     return api
