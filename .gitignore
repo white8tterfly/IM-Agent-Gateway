@@ -11,6 +11,9 @@ venv/
 logs/
 status
 
+# 发布打包产物
+dist/
+
 # IDE / 编辑器
 .idea/
 .vscode/
