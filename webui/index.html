@@ -323,6 +323,7 @@
       const level = a.complexity ? (LEVEL_CN[a.complexity] || a.complexity) : '';
       // 用途与档位改成名称后的标签，扫一眼就能对比，不再占一行说明
       row.innerHTML = `
+        <span class="agent-avatar" data-kind="${esc(a.kind || '')}" aria-hidden="true">${esc(kind.slice(0, 1))}</span>
         <div class="info">
           <div class="name">
             ${esc(a.label)}
