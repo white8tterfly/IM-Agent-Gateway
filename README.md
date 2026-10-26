@@ -261,6 +261,10 @@ powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall 
 
 默认开启。开启后浏览器相当于第三个 IM，与机器人消息共享同一套路由、白名单与队列机制。
 
+<div align="center">
+  <img src="assets/webui-console.png" alt="Web 管理台：运行状态、消息通道、智能体开关与任务" width="100%">
+</div>
+
 | 开关 | 默认 | 说明 |
 | --- | --- | --- |
 | `WEBUI_ENABLED` | `1` | `1` = 接入 webui 通道，提供管理台与聊天台；`0` = 不接入 |
