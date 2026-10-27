@@ -225,6 +225,7 @@ Each user receives a short command hint on their first message (only once per us
 
 | Common setting | Description | Default |
 | --- | --- | --- |
+| `LANGUAGE` | UI language: `zh` Chinese / `en` English for pages and bot replies | `zh` |
 | `CHANNELS` | IM channels to load | `wecom,feishu` |
 | `AGENTS` | Agents to load | `siliconflow,qoder,workbuddy,trae` |
 | `DEFAULT_AGENT` | Fallback agent when auto-routing is unavailable | `siliconflow` |
@@ -234,7 +235,7 @@ Each user receives a short command hint on their first message (only once per us
 | `WATCH_ENABLED` | Master switch for wake-on-message | `0` |
 | `ALLOWED_USERS` | User allowlist; empty means unrestricted | empty |
 
-See [.env.example](./.env.example) for every setting, its default, and its purpose. Configuration can be changed three equivalent ways: edit `.env`, use the web console, or run `python manage.py config set <key> <value>`.
+See [.env.example](./.env.example) for every setting, its default, and its purpose. Configuration can be changed three equivalent ways: edit `.env`, use the web console, or run `python manage.py config set <key> <value>`. Chinese and English can be switched at any time from the top-right corner of the admin and chat pages; the choice is written back to `LANGUAGE` and takes effect immediately.
 
 ```bash
 python manage.py config show    # show the effective configuration

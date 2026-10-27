@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ...base import IMChannel, InboundMessage
 from ....config import Config
+from ....i18n import parse_accept_language, t, use_language
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +69,22 @@ class WebUIChannel(IMChannel):
         @self.app.middleware("http")
         async def guard_http(request, call_next):
             """管理端点守卫：校验 Host 与令牌，仅 /api/session 免令牌。"""
-            path = request.url.path
-            if path.startswith("/api/"):
-                if not self._host_allowed(request.headers.get("host", "")):
-                    return JSONResponse({"ok": False, "error": "禁止的访问来源"}, status_code=403)
-                if path != "/api/session" and not self._token_ok(request.headers.get(TOKEN_HEADER)):
-                    return JSONResponse({"ok": False, "error": "会话令牌缺失或失效"}, status_code=403)
-            return await call_next(request)
+            # 按请求头确定本次请求的语言，下游端点的文案随之切换。
+            # 优先自定义头 X-Ui-Language：浏览器的 Accept-Language 由内核决定，
+            # 前端脚本无法改写（属 Fetch 规范禁止设置的请求头）。
+            with use_language(parse_accept_language(
+                    request.headers.get("x-ui-language")
+                    or request.headers.get("accept-language", ""))):
+                path = request.url.path
+                if path.startswith("/api/"):
+                    if not self._host_allowed(request.headers.get("host", "")):
+                        return JSONResponse({"ok": False, "error": t("禁止的访问来源", "Forbidden origin")},
+                                            status_code=403)
+                    if path != "/api/session" and not self._token_ok(request.headers.get(TOKEN_HEADER)):
+                        return JSONResponse({"ok": False, "error": t("会话令牌缺失或失效",
+                                                                     "Session token missing or invalid")},
+                                            status_code=403)
+                return await call_next(request)
 
         @self.app.websocket("/ws/chat")
         async def ws_chat(ws: WebSocket) -> None:
@@ -178,7 +188,9 @@ class WebUIChannel(IMChannel):
         await self._server.serve()
         if not self._server.started:
             # 端口被占用等启动失败：只放弃本通道，不拖垮其他 IM 通道
-            logger.error("webui HTTP 启动失败（端口 %s 可能被占用），Web 控制台不可用", self.port)
+            logger.error(t("webui HTTP 启动失败（端口 %s 可能被占用），Web 控制台不可用",
+                           "Failed to start the webui HTTP server (port %s may be in use); "
+                           "the web console is unavailable"), self.port)
             await self._exit.wait()
 
     async def close(self) -> None:
@@ -212,7 +224,9 @@ class WebUIChannel(IMChannel):
             self.app.mount("/", StaticFiles(directory=self.static_dir, html=True),
                            name="static")
         else:
-            logger.warning("webui 静态目录不存在：%s，页面不可用", self.static_dir)
+            logger.warning(t("webui 静态目录不存在：%s，页面不可用",
+                             "webui static directory does not exist: %s; pages are unavailable"),
+                           self.static_dir)
 
     # ---------- 回复能力 ----------
 
@@ -230,14 +244,16 @@ class WebUIChannel(IMChannel):
         """按 reply_token 定位连接回推；连接已失效时静默丢弃。"""
         ws = self._conns.get(token)
         if ws is None:
-            logger.info("webui 连接已关闭，丢弃回复（token=%s…）", token[:8])
+            logger.info(t("webui 连接已关闭，丢弃回复（token=%s…）",
+                          "webui connection closed; dropping reply (token=%s…)"), token[:8])
             return
         try:
             await ws.send_json(payload)
         except Exception:
             # 连接失效（浏览器已关页等）：摘除，避免后续继续往死连接推
             self._conns.pop(token, None)
-            logger.info("webui 推送失败，已摘除连接（token=%s…）", token[:8])
+            logger.info(t("webui 推送失败，已摘除连接（token=%s…）",
+                          "webui push failed; connection removed (token=%s…)"), token[:8])
 
     # ---------- 观测 ----------
 

@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import load_config
+from im_agent_gateway.i18n import set_language
 from im_agent_gateway.plugins import load_agent
 from im_agent_gateway.router.dispatcher import MessageRouter
 
@@ -20,6 +21,7 @@ def check(cond: bool, label: str) -> None:
 
 async def main() -> None:
     cfg = load_config()
+    set_language("zh")  # 断言中文文案：固定语言，避免受本机 .env 的 LANGUAGE 影响
     cfg.allowed_users = set()
     cfg.jev_route = False
 

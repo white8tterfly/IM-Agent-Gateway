@@ -9,12 +9,13 @@
 <body>
 
 <header class="topbar">
-  <div class="logo">IM-Agent Gateway 控制台</div>
+  <div class="logo" data-i18n="IM-Agent Gateway 控制台||IM-Agent Gateway Console">IM-Agent Gateway 控制台</div>
   <nav>
-    <a href="index.html">管理台</a>
-    <a href="chat.html" class="current">聊天台</a>
+    <a href="index.html" data-i18n="管理台||Admin">管理台</a>
+    <a href="chat.html" class="current" data-i18n="聊天台||Chat">聊天台</a>
   </nav>
   <div class="spacer"></div>
+  <button id="lang-btn" type="button" class="lang-btn" title="Switch language">EN</button>
   <span id="state-badge" class="badge offline">未连接</span>
 </header>
 
@@ -23,37 +24,39 @@
   <div class="panel">
     <h1 id="overlay-title">服务正在休息</h1>
     <p id="overlay-text">服务暂时没有在运行，你可以把它叫醒。</p>
-    <button id="wake-btn" class="btn big">点击唤醒</button>
-    <p id="overlay-tip" class="overlay-tip hidden">正在尝试叫醒服务，请稍等…</p>
+    <button id="wake-btn" class="btn big" data-i18n="点击唤醒||Wake up">点击唤醒</button>
+    <p id="overlay-tip" class="overlay-tip hidden" data-i18n="正在尝试叫醒服务，请稍等…||Waking the service, please wait…">正在尝试叫醒服务，请稍等…</p>
   </div>
 </div>
 
 <div class="chat-layout">
   <!-- 会话栏：说明这里能做什么，并提供清空本页显示的入口 -->
   <div class="chat-head">
-    <h1>对话</h1>
-    <p class="chat-sub">消息会交给已开启的智能体处理，输入 /help 查看可用指令</p>
-    <button id="clear-btn" type="button" class="btn ghost small">清空记录</button>
+    <h1 data-i18n="对话||Chat">对话</h1>
+    <p class="chat-sub" data-i18n="消息会交给已开启的智能体处理，输入 /help 查看可用指令||Messages are handled by enabled agents; type /help to see available commands">消息会交给已开启的智能体处理，输入 /help 查看可用指令</p>
+    <button id="clear-btn" type="button" class="btn ghost small" data-i18n="清空记录||Clear">清空记录</button>
   </div>
 
   <main id="chat-main" class="chat-main">
-    <div class="bubble sys">正在连接服务…</div>
+    <div class="bubble sys" data-i18n="正在连接服务…||Connecting to the service…">正在连接服务…</div>
   </main>
 
   <!-- 输入区：输入框与发送按钮同一个容器，聚焦时整体抬起 -->
   <div class="chat-foot">
     <div class="composer">
-      <textarea id="chat-text" rows="1" placeholder="输入消息…"></textarea>
-      <button id="send-btn" class="btn send-btn" type="button" disabled>发送</button>
+      <textarea id="chat-text" rows="1" placeholder="输入消息…"
+                data-i18n="输入消息…||Type a message…" data-i18n-attr="placeholder"></textarea>
+      <button id="send-btn" class="btn send-btn" type="button" disabled data-i18n="发送||Send">发送</button>
     </div>
-    <p class="composer-tip">Enter 发送 · Shift + Enter 换行</p>
+    <p class="composer-tip" data-i18n="Enter 发送 · Shift + Enter 换行||Enter to send · Shift + Enter for a new line">Enter 发送 · Shift + Enter 换行</p>
   </div>
 </div>
 
 <script type="module">
   // 聊天台页面逻辑：WebSocket 帧渲染（流式气泡 / 文本气泡）+ 发送交互 + 睡眠态唤醒
   import { createChatSocket } from './js/ws.js';
-  import { detectState, getStatus, wakeService } from './js/api.js';
+  import { detectState, getStatus, setConfig, wakeService } from './js/api.js';
+  import { applyI18n, getLang, initLang, onLangChange, setLang, t } from './js/i18n.js';
 
   const $ = (sel) => document.querySelector(sel);
   const chatMain = $('#chat-main');
@@ -65,6 +68,29 @@
   const overlayText = $('#overlay-text');
   const wakeBtn = $('#wake-btn');
   const overlayTip = $('#overlay-tip');
+  const langBtn = $('#lang-btn');
+
+  // ---------- 语言切换 ----------
+  // 按钮显示的是「点一下会切到的语言」：中文界面显示 EN，英文界面显示 中
+  function syncLangUI() {
+    langBtn.textContent = getLang() === 'en' ? '中' : 'EN';
+    document.title = t('聊天台 - IM-Agent Gateway 控制台', 'Chat - IM-Agent Gateway Console');
+    applyI18n();
+  }
+
+  // 切换语言：即时重渲染静态文案，并写回 LANGUAGE 让 IM 侧回复跟随（离线时忽略失败）
+  async function switchLanguage(next) {
+    setLang(next);
+    syncLangUI();
+    try {
+      await setConfig('LANGUAGE', next);
+    } catch (_) { /* 睡眠/离线状态下无法写回，仅本页生效 */ }
+  }
+
+  langBtn.addEventListener('click', () => switchLanguage(getLang() === 'en' ? 'zh' : 'en'));
+  onLangChange(syncLangUI);
+  syncLangUI();
+  stateBadge.textContent = t('未连接', 'Offline');
 
   // ---------- 气泡渲染 ----------
 
@@ -102,7 +128,7 @@
 
     const avatar = document.createElement('span');
     avatar.className = 'avatar';
-    avatar.textContent = isUser ? '我' : 'AI';
+    avatar.textContent = isUser ? t('我', 'Me') : 'AI';
 
     const body = document.createElement('div');
     body.className = 'msg-body';
@@ -110,7 +136,7 @@
     const meta = document.createElement('div');
     meta.className = 'msg-meta';
     const who = document.createElement('span');
-    who.textContent = isUser ? '我' : '助手';
+    who.textContent = isUser ? t('我', 'Me') : t('助手', 'Assistant');
     const time = document.createElement('span');
     time.className = 'time';
     time.textContent = timeNow();
@@ -164,7 +190,9 @@
   function pendingHint() {
     // 发出消息后 5 秒内没有任何回帧：给出通俗提示（多半是白名单未放行）
     noReplyTimer = setTimeout(() => {
-      addBubble('sys', '服务 5 秒内没有回应。如果一直如此，请在管理台检查「允许名单」配置里是否包含 webui。');
+      addBubble('sys', t(
+        '服务 5 秒内没有回应。如果一直如此，请在管理台检查「允许名单」配置里是否包含 webui。',
+        'No reply within 5 seconds. If this keeps happening, check that "allowed users" includes webui in the admin console.'));
     }, 5000);
   }
 
@@ -208,7 +236,8 @@
       clearTimeout(noReplyTimer);
       noReplyTimer = null;
     }
-    addBubble('sys', '已清空本页显示，服务端会话上下文不受影响');
+    addBubble('sys', t('已清空本页显示，服务端会话上下文不受影响',
+      'Display cleared; the server-side conversation context is unchanged'));
   });
 
   // ---------- 睡眠 / 离线遮罩 ----------
@@ -220,12 +249,15 @@
       return; // 探测间隙服务自己回来了，等 WS 自动重连即可
     }
     if (state === 'sleeping') {
-      overlayTitle.textContent = '服务正在休息';
-      overlayText.textContent = '服务暂时没有在运行，你可以把它叫醒。';
+      overlayTitle.textContent = t('服务正在休息', 'Service is sleeping');
+      overlayText.textContent = t('服务暂时没有在运行，你可以把它叫醒。',
+        'The service is not running right now; you can wake it up.');
       wakeBtn.classList.remove('hidden');
     } else {
-      overlayTitle.textContent = '服务没有启动';
-      overlayText.textContent = '既没有查到运行中的服务，也没有找到后台待命程序。请先在电脑上启动服务，再刷新本页。';
+      overlayTitle.textContent = t('服务没有启动', 'Service is not running');
+      overlayText.textContent = t(
+        '既没有查到运行中的服务，也没有找到后台待命程序。请先在电脑上启动服务，再刷新本页。',
+        'No running service or watchdog was found. Start the service on the computer, then reload this page.');
       wakeBtn.classList.add('hidden');
     }
     overlay.classList.remove('hidden');
@@ -234,7 +266,7 @@
   // 唤醒按钮：与管理台同款——打 /api/wake 后轮询等上线，收起遮罩后 WS 自动重连
   wakeBtn.addEventListener('click', async () => {
     wakeBtn.disabled = true;
-    wakeBtn.textContent = '正在叫醒…';
+    wakeBtn.textContent = t('正在叫醒…', 'Waking…');
     overlayTip.classList.remove('hidden');
     try {
       await wakeService();
@@ -245,15 +277,17 @@
         await getStatus();
         clearInterval(poll);
         wakeBtn.disabled = false;
-        wakeBtn.textContent = '点击唤醒';
+        wakeBtn.textContent = t('点击唤醒', 'Wake up');
         overlayTip.classList.add('hidden');
         overlay.classList.add('hidden');
       } catch (_) {
         if (Date.now() > deadline) {
           clearInterval(poll);
           wakeBtn.disabled = false;
-          wakeBtn.textContent = '点击唤醒';
-          overlayText.textContent = '叫醒服务超过了 60 秒还没成功，请到电脑上检查服务进程。';
+          wakeBtn.textContent = t('点击唤醒', 'Wake up');
+          overlayText.textContent = t(
+            '叫醒服务超过了 60 秒还没成功，请到电脑上检查服务进程。',
+            'Waking the service timed out after 60 seconds; check the service process on the computer.');
         }
       }
     }, 1500);
@@ -264,31 +298,50 @@
   let welcomed = false;  // 欢迎语只插一次，重连回来不刷屏
   let wasOnline = false; // 记录上一次是否在线，用于断开时补一条提示
   const bootHint = chatMain.querySelector('.bubble.sys');  // 首屏的「正在连接服务…」
+
+  // 首次连上时若本页还没选过语言，跟随服务端 LANGUAGE（页面与机器人回复保持一致）
+  async function syncServerLanguage() {
+    try {
+      const st = await getStatus();
+      initLang(st.language);
+    } catch (_) { /* 接口不可用时保持本页已选语言 */ }
+  }
+
   const socket = createChatSocket({
     onFrame,
     onState(state) {
       if (state === 'online') {
         stateBadge.className = 'badge';
-        stateBadge.textContent = '已连接';
+        stateBadge.textContent = t('已连接', 'Connected');
         overlay.classList.add('hidden');
         if (!welcomed) {
           welcomed = true;
           bootHint?.remove();  // 连上后把「正在连接服务…」换成欢迎语，避免两条系统提示叠在一起
-          addBubble('sys', '已连接，可以直接发消息，也可以发送指令（/help 查看全部指令）');
+          syncServerLanguage();
+          addBubble('sys', t('已连接，可以直接发消息，也可以发送指令（/help 查看全部指令）',
+            'Connected. Send a message or a command (/help lists all commands)'));
         } else if (!wasOnline) {
-          addBubble('sys', '连接已恢复，可以继续发送消息');
+          addBubble('sys', t('连接已恢复，可以继续发送消息',
+            'Connection restored; you can keep sending messages'));
         }
         wasOnline = true;
       } else {
         stateBadge.className = 'badge offline';
-        stateBadge.textContent = '连接已断开';
+        stateBadge.textContent = t('连接已断开', 'Disconnected');
         if (wasOnline) {
-          addBubble('sys', '连接已断开，正在自动重连…');
+          addBubble('sys', t('连接已断开，正在自动重连…',
+            'Disconnected; reconnecting automatically…'));
           wasOnline = false;
         }
         probeService();  // 断开时探测：睡着给一键唤醒，彻底没起给启动提示
       }
     },
+  });
+
+  // 语言切换后状态徽章按当前连接状态重设（静态文案会把它重置为「未连接」）
+  onLangChange(() => {
+    stateBadge.className = wasOnline ? 'badge' : 'badge offline';
+    stateBadge.textContent = wasOnline ? t('已连接', 'Connected') : t('连接已断开', 'Disconnected');
   });
 </script>
 

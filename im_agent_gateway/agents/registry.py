@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from ..i18n import t
 from .base import BaseAgent
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,8 @@ class AgentRegistry:
             raise ValueError(f"Agent {agent.name} 已注册，不能重复注册")
         self._agents[agent.name] = agent
         self._active[agent.name] = active
-        logger.info("已注册 Agent：%s（%s）", agent.label, "启用" if active else "停用")
+        logger.info(t("已注册 Agent：%s（%s）", "Registered agent: %s (%s)"), agent.display_label,
+                    t("启用", "enabled") if active else t("停用", "disabled"))
 
     def get(self, name: str) -> BaseAgent | None:
         return self._agents.get(name)
@@ -63,20 +65,29 @@ class AgentRegistry:
                 agent.kind = kinds[agent.name]
             if agent.name in complexity:
                 agent.complexity = complexity[agent.name]
-            logger.debug("Agent %s 元数据：用途 %s，档位 %r",
-                         agent.name, agent.kind, agent.complexity or "未声明")
+            logger.debug(t("Agent %s 元数据：用途 %s，档位 %r",
+                           "Agent %s metadata: kind %s, complexity %r"),
+                         agent.name, agent.kind,
+                         agent.complexity or t("未声明", "not declared"))
 
     def set_active(self, name: str, active: bool) -> str | None:
         """开启/关闭 Agent；成功返回 None，失败返回错误文案。"""
         agent = self._agents.get(name)
         if agent is None:
-            return f"未注册的 Agent：{name}（可用：{', '.join(self.names) or '无'}）"
+            return t(
+                f"未注册的 Agent：{name}（可用：{', '.join(self.names) or '无'}）",
+                f"Unknown agent: {name} (available: {', '.join(self.names) or 'none'})")
         if active and not agent.available:
-            return f"{agent.label} 未满足启用条件（如未配置 API_KEY），无法开启"
+            return t(
+                f"{agent.display_label} 未满足启用条件（如未配置 API_KEY），无法开启",
+                f"{agent.display_label} cannot be enabled: prerequisites missing (e.g. no API_KEY)")
         if self._active[name] == active:
-            return f"{agent.label} 已{'开启' if active else '关闭'}，无需重复操作"
+            return t(
+                f"{agent.display_label} 已{'开启' if active else '关闭'}，无需重复操作",
+                f"{agent.display_label} is already {'on' if active else 'off'}")
         self._active[name] = active
-        logger.info("Agent %s 已%s", agent.label, "开启" if active else "关闭")
+        logger.info(t("Agent %s 已%s", "Agent %s is now %s"), agent.display_label,
+                    t("开启", "on") if active else t("关闭", "off"))
         return None
 
     async def close(self) -> None:
@@ -85,4 +96,4 @@ class AgentRegistry:
             try:
                 await agent.close()
             except Exception:
-                logger.exception("关闭 Agent %s 时发生异常", name)
+                logger.exception(t("关闭 Agent %s 时发生异常", "Error while closing agent %s"), name)

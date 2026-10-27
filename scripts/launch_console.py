@@ -19,8 +19,9 @@ sys.path.insert(0, str(ROOT))
 
 LOG = ROOT / "logs" / "im_agent_gateway.log"
 SERVICE_OUT = ROOT / "logs" / "launch_service.log"
-READY_MARK = "服务已启动"
-DUP_MARK = "已有服务实例在运行"
+# 日志已双语：两种语言的就绪/重复实例标记都认，避免切到英文后启动器等不到信号
+READY_MARKS = ("服务已启动", "Service started")
+DUP_MARKS = ("已有服务实例在运行", "Another service instance is already running")
 TIMEOUT = 120
 
 
@@ -43,9 +44,11 @@ def port_open(port: int) -> bool:
 
 def pause() -> None:
     """失败时停住窗口，避免一闪而过；无控制台（pythonw）时只等几秒。"""
+    from im_agent_gateway.i18n import t
+
     if sys.stdin is not None:
         try:
-            input("按回车键关闭窗口…")
+            input(t("按回车键关闭窗口…", "Press Enter to close this window…"))
             return
         except EOFError:
             pass
@@ -65,9 +68,10 @@ def read_new(start: int) -> tuple[str, int]:
 
 def main() -> int:
     from im_agent_gateway.config import load_config
+    from im_agent_gateway.i18n import t
 
     cfg = load_config()
-    print("IM-Agent Gateway 正在启动，请稍候…")
+    print(t("IM-Agent Gateway 正在启动，请稍候…", "IM-Agent Gateway is starting, please wait…"))
     pos = LOG.stat().st_size if LOG.exists() else 0
 
     # 用 pythonw 启动服务本身，避免再弹一个控制台；输出重定向到文件便于失败排查
@@ -90,37 +94,41 @@ def main() -> int:
     ready = dup = False
     while time.time() < deadline:
         chunk, pos = read_new(pos)
-        if READY_MARK in chunk:
+        if any(m in chunk for m in READY_MARKS):
             ready = True
             break
-        if DUP_MARK in chunk:
+        if any(m in chunk for m in DUP_MARKS):
             dup = True
             break
         if proc.poll() is not None:
-            print("\n服务启动失败，错误摘要：")
-            print(tail(SERVICE_OUT) or "（无输出）")
+            print("\n" + t("服务启动失败，错误摘要：", "Failed to start the service. Error summary:"))
+            print(tail(SERVICE_OUT) or t("（无输出）", "(no output)"))
             pause()
             return 1
         print(".", end="", flush=True)
         time.sleep(0.3)
 
     if not (ready or dup):
-        print(f"\n启动超时（{TIMEOUT} 秒），请查看 logs/im_agent_gateway.log")
+        print("\n" + t(f"启动超时（{TIMEOUT} 秒），请查看 logs/im_agent_gateway.log",
+                      f"Startup timed out after {TIMEOUT}s; see logs/im_agent_gateway.log"))
         print(tail(SERVICE_OUT))
         pause()
         return 1
 
-    print("\n已有服务实例在运行，直接打开控制台。" if dup else "\n服务已就绪。")
+    print("\n" + (t("已有服务实例在运行，直接打开控制台。", "A service instance is already running; opening the console.")
+                  if dup else t("服务已就绪。", "Service is ready.")))
     if cfg.webui_enabled and port_open(cfg.webui_port):
         url = cfg.webui_urls[0]
         try:
             webbrowser.open(url)
-            print(f"已打开 Web 控制台：{url}")
+            print(t(f"已打开 Web 控制台：{url}", f"Opened the web console: {url}"))
         except Exception as exc:
-            print(f"未能自动打开浏览器（{exc}），请手动访问：{url}")
+            print(t(f"未能自动打开浏览器（{exc}），请手动访问：{url}",
+                    f"Could not open the browser automatically ({exc}); please visit: {url}"))
     elif cfg.webui_enabled:
-        print("Web 控制台端口尚未就绪，请稍后手动访问。")
-    print("窗口将在 2 秒后自动关闭。")
+        print(t("Web 控制台端口尚未就绪，请稍后手动访问。",
+                "The web console port is not ready yet; please open it manually in a moment."))
+    print(t("窗口将在 2 秒后自动关闭。", "This window will close automatically in 2 seconds."))
     time.sleep(2)
     return 0
 

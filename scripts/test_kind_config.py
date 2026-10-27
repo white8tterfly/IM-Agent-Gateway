@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from im_agent_gateway.agents.base import AgentResult, BaseAgent
 from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import Config, load_config
+from im_agent_gateway.i18n import set_language
 
 
 def check(cond: bool, label: str) -> None:
@@ -52,7 +53,9 @@ def load_with_env(**pairs) -> Config:
         else:
             os.environ[key] = val
     try:
-        return load_config()
+        cfg = load_config()
+        set_language("zh")  # 断言中文文案：固定语言，避免受本机 .env 的 LANGUAGE 影响
+        return cfg
     finally:
         for key, old in saved.items():
             if old is None:

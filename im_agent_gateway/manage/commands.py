@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from ..agents.registry import AgentRegistry
 from ..config import Config, apply_hot_config
+from ..i18n import t
 from . import persist
 
 
@@ -34,7 +35,8 @@ class AgentOps:
             persist.set_env_value(cfg.env_file, "ENABLED_AGENTS", ",".join(names))
         except OSError as exc:
             # 开关已在内存生效但没写进文件：如实告知，重启后回旧值
-            return f"开关已更新，但写回 .env 失败：{exc}"
+            return t(f"开关已更新，但写回 .env 失败：{exc}",
+                     f"Switch applied, but writing .env failed: {exc}")
         return None
 
 
@@ -56,13 +58,17 @@ class ConfigOps:
         from .config_meta import CONFIG_META_BY_KEY
         item = CONFIG_META_BY_KEY.get(key.strip().upper())
         if item is None:
-            return f"未知的配置项：{key}（该配置暂不支持在这里修改，请直接编辑 .env 文件）", False
+            return t(f"未知的配置项：{key}（该配置暂不支持在这里修改，请直接编辑 .env 文件）",
+                     f"Unknown setting: {key} (edit the .env file directly)"), False
+        label = t(item.label, item.label_en or item.label)
         if item.sensitive and not value.strip():
-            return f"{item.label}是敏感配置，留空表示不修改；如需清空请直接编辑 .env 文件", False
+            return t(f"{label}是敏感配置，留空表示不修改；如需清空请直接编辑 .env 文件",
+                     f"{label} is sensitive; leaving it empty keeps the current value "
+                     f"(edit .env directly to clear it)"), False
         try:
             persist.set_env_value(cfg.env_file, item.key, value)
         except OSError as exc:
-            return f"写入 .env 失败：{exc}", False
+            return t(f"写入 .env 失败：{exc}", f"Failed to write .env: {exc}"), False
         # 写盘成功后尝试热更新内存 cfg；未登记在 HOT_PARSERS 的项返回 False
         hot = apply_hot_config(cfg, item.key, value)
         return None, hot

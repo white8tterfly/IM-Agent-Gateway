@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from ...config import Config
+from ...i18n import t
 from ..base import BaseAgent
 from ..qoder.runner import _StreamParser, chat_session_key, resolve_cli_argv
 
@@ -73,8 +74,10 @@ class WorkBuddyAgent(BaseAgent):
 
     name = "workbuddy"
     label = "WorkBuddy（办公）"
+    label_en = "WorkBuddy (Office)"
     kind = "office"  # 类默认用途：办公（可被 .env 的 AGENT_KINDS 覆写）
     routing_hint = "办公任务：文档、表格、PPT 等办公文件处理与办公自动化"
+    routing_hint_en = "Office tasks: documents, spreadsheets, slides and office automation"
     # 办公意图关键词：Jev 未配置/降级时，命中即自动路由到本 Agent
     routing_keywords = (
         "文档", "表格", "幻灯片", "演示文稿", "ppt", "excel", "word", "pdf",
@@ -105,7 +108,9 @@ class WorkBuddyAgent(BaseAgent):
         return self.cfg.workbuddy_cwd
 
     def start_hint(self, cwd: str = "", model: str = "") -> str:
-        return f"WorkBuddy 处理中（目录：{cwd or self.cfg.workbuddy_cwd}）\n"
+        folder = cwd or self.cfg.workbuddy_cwd
+        return t(f"· {self.display_label}处理中… 目录：{folder}\n\n",
+                 f"· {self.display_label} is working… dir: {folder}\n\n")
 
     async def submit(
         self,
@@ -127,7 +132,7 @@ class WorkBuddyAgent(BaseAgent):
             worker = asyncio.create_task(self._worker(chat_key, state))
             self._workers.add(worker)
             worker.add_done_callback(lambda t: self._workers.discard(t))
-        logger.info("会话 %s 已排队任务: %.120s", chat_key, query)
+        logger.info(t("会话 %s 已排队任务: %.120s", "Session %s queued task: %.120s"), chat_key, query)
         return task.done
 
     async def stop(self, chat_key: str) -> bool:
@@ -145,7 +150,7 @@ class WorkBuddyAgent(BaseAgent):
         if state is not None:
             state.stop_requested = False
             state.session_id = str(uuid.uuid4())  # 全新 UUID，旧会话自然作废
-        logger.info("会话 %s 已重置", chat_key)
+        logger.info(t("会话 %s 已重置", "Session %s reset"), chat_key)
 
     async def list_models(self) -> list[str]:
         """codebuddy 无 --list-models；从 --help 的 --model 说明中解析模型列表。"""
@@ -160,11 +165,13 @@ class WorkBuddyAgent(BaseAgent):
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
-                raise TimeoutError("获取模型列表超时，请稍后重试") from None
+                raise TimeoutError(t("获取模型列表超时，请稍后重试",
+                                     "Timed out fetching models, please retry later")) from None
         except FileNotFoundError as exc:
-            raise RuntimeError(
-                f"找不到 {self.cfg.workbuddy_bin}，请确认已安装 WorkBuddy CLI"
-            ) from exc
+            raise RuntimeError(t(
+                f"找不到 {self.cfg.workbuddy_bin}，请确认已安装 WorkBuddy CLI",
+                f"Cannot find {self.cfg.workbuddy_bin}; install the WorkBuddy CLI first",
+            )) from exc
         text = out.decode("utf-8", errors="replace")
         m = _MODEL_LIST_PAT.search(text)
         if not m:
@@ -191,7 +198,7 @@ class WorkBuddyAgent(BaseAgent):
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # 兜底：队列不能因异常停摆
-                    logger.exception("会话 %s 任务执行异常", chat_key)
+                    logger.exception(t("会话 %s 任务执行异常", "Session %s task failed"), chat_key)
                     if not task.done.done():
                         task.done.set_result(WBResult(ok=False, text="", error=str(exc)))
                 finally:
@@ -212,9 +219,10 @@ class WorkBuddyAgent(BaseAgent):
         result = await self._run_process(chat_key, state, task)
         state.current = None
         logger.info(
-            "会话 %s 任务完成 ok=%s 输出 %d 字%s",
+            t("会话 %s 任务完成 ok=%s 输出 %d 字%s",
+              "Session %s task done ok=%s output %d chars%s"),
             chat_key, result.ok, len(result.text),
-            f"（{result.error}）" if result.error else "",
+            t(f"（{result.error}）", f" ({result.error})") if result.error else "",
         )
         if not task.done.done():
             task.done.set_result(result)
@@ -246,7 +254,8 @@ class WorkBuddyAgent(BaseAgent):
             _codebuddy_project_dir(self.cfg.workbuddy_cwd).mkdir(parents=True, exist_ok=True)
         except Exception:
             # 补建失败不阻断任务，让 codebuddy 自身报错暴露问题
-            logger.debug("补建 codebuddy 项目会话目录失败", exc_info=True)
+            logger.debug(t("补建 codebuddy 项目会话目录失败",
+                           "Failed to create the codebuddy project session directory"), exc_info=True)
 
     async def _run_process(self, chat_key: str, state: _WBState, task: _WBTask) -> WBResult:
         """执行一次 codebuddy；支持 --resume 续接，会话不存在时自动新建。"""
@@ -258,7 +267,8 @@ class WorkBuddyAgent(BaseAgent):
         )
         if result.ok or not _WB_SESSION_MISSING_PAT.search(result.error or ""):
             return result
-        logger.info("会话 %s 不存在，新建会话", state.session_id)
+        logger.info(t("会话 %s 不存在，新建会话", "Session %s not found; creating a new session"),
+                    state.session_id)
         return await self._exec(
             chat_key, self._build_args(task.query, task.model, resume=False, session_id=state.session_id),
             task.on_output,
@@ -280,7 +290,7 @@ class WorkBuddyAgent(BaseAgent):
                     stderr=asyncio.subprocess.DEVNULL,
                 )
             except Exception:
-                logger.debug("taskkill 失败 pid=%s", proc.pid)
+                logger.debug(t("taskkill 失败 pid=%s", "taskkill failed pid=%s"), proc.pid)
 
     async def _exec(
         self,
@@ -288,7 +298,7 @@ class WorkBuddyAgent(BaseAgent):
         args: list[str],
         on_output: Callable[[str], object] | None = None,
     ) -> WBResult:
-        logger.info("启动 codebuddy: %s", " ".join(args[:3]) + " ...")
+        logger.info(t("启动 codebuddy: %s", "Starting codebuddy: %s"), " ".join(args[:3]) + " ...")
         # codebuddy -p 模式不自建项目会话目录，先补建避免写会话文件 ENOENT
         self._ensure_project_dir()
         try:
@@ -301,7 +311,9 @@ class WorkBuddyAgent(BaseAgent):
         except FileNotFoundError:
             return WBResult(
                 ok=False, text="",
-                error=f"找不到 {self.cfg.workbuddy_bin}，请先执行 npm install -g @tencent-ai/codebuddy-code 并登录",
+                error=t(f"找不到 {self.cfg.workbuddy_bin}，请先执行 npm install -g @tencent-ai/codebuddy-code 并登录",
+                        f"Cannot find {self.cfg.workbuddy_bin}; run "
+                        f"npm install -g @tencent-ai/codebuddy-code and sign in first"),
             )
 
         state = self._chats.get(chat_key)
@@ -360,7 +372,8 @@ class WorkBuddyAgent(BaseAgent):
             text = "\n".join(collected)
             return WBResult(
                 ok=False, text=text,
-                error=f"任务超时（>{self.cfg.workbuddy_timeout_sec:.0f}s），已终止",
+                error=t(f"任务超时（>{self.cfg.workbuddy_timeout_sec:.0f}s），已终止",
+                        f"Task timed out (>{self.cfg.workbuddy_timeout_sec:.0f}s) and was stopped"),
             )
         except BaseException:
             # 输出回调异常（如长连接断开）等：终止进程，避免孤儿进程
@@ -379,16 +392,18 @@ class WorkBuddyAgent(BaseAgent):
         if _AUTH_REQUIRED_PAT.search(error_text):
             return WBResult(
                 ok=False, text="",
-                error="WorkBuddy 尚未登录，请在本机终端执行 codebuddy login 登录后重试",
+                error=t("WorkBuddy 尚未登录，请在本机终端执行 codebuddy login 登录后重试",
+                        "WorkBuddy is not signed in; run codebuddy login on this machine and retry"),
             )
         if proc.returncode != 0:
             return WBResult(
                 ok=False, text=text,
-                error=f"codebuddy 退出码 {proc.returncode}" + (f": {error_text}" if error_text else ""),
+                error=t(f"codebuddy 退出码 {proc.returncode}", f"codebuddy exited with {proc.returncode}")
+                + (f": {error_text}" if error_text else ""),
             )
         if not text:
             return WBResult(
                 ok=False, text="",
-                error=error_text or "codebuddy 无输出",
+                error=error_text or t("codebuddy 无输出", "codebuddy produced no output"),
             )
         return WBResult(ok=True, text=text, usage=parser.usage_line())

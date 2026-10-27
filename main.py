@@ -15,6 +15,7 @@ from im_agent_gateway.config import Config, load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
 from im_agent_gateway.gateway.handoff import load as load_handoff
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.i18n import t
 from im_agent_gateway.manage.api import create_router
 from im_agent_gateway.manage.service import ManageService
 from im_agent_gateway.plugins import load_agent, load_channel
@@ -24,26 +25,34 @@ LOG_DIR = Path(__file__).parent / "logs"
 LOCK_FILE = LOG_DIR / "service.lock"
 
 
-def acquire_instance_lock():
+def acquire_instance_lock(wait: float = 8.0):
     """独占服务锁：同一时间只允许一个实例，避免同一机器人双连接互踢。
 
     无窗口启动（桌面快捷方式）与手动启动都会经过这里。进程退出时由系统释放，
     因此空闲自动退出后下次仍能正常启动。
+
+    托盘退出后立刻双击快捷方式时，上一个实例还在关闭 IM 长连接、尚未释放锁。
+    此时短暂等待它退出（默认 8 秒）再拿锁，否则本次启动会误判为「已有实例」而退出。
     """
     LOG_DIR.mkdir(exist_ok=True)
     handle = open(LOCK_FILE, "a+")
-    try:
-        if os.name == "nt":
-            import msvcrt
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        handle.close()
-        return None
-    return handle
+    deadline = time.time() + wait
+    while True:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            if time.time() >= deadline:
+                handle.close()
+                return None
+            time.sleep(0.25)
+            continue
+        return handle
 
 
 def setup_logging(level: str) -> None:
@@ -77,11 +86,17 @@ def check_prereqs(cfg) -> None:
     """
     logger = logging.getLogger("main")
     if "qoder" in cfg.agents and shutil.which(cfg.qoder_bin) is None:
-        logger.warning("未找到 %s，Qoder CN（编码）不可用；安装：npm install -g @qodercn-ai/qoderclicn", cfg.qoder_bin)
+        logger.warning(t("未找到 %s，Qoder CN（编码）不可用；安装：npm install -g @qodercn-ai/qoderclicn",
+                         "Qoder CN (coding) unavailable: %s not found; install: npm install -g @qodercn-ai/qoderclicn"),
+                       cfg.qoder_bin)
     if "workbuddy" in cfg.agents and shutil.which(cfg.workbuddy_bin) is None:
-        logger.warning("未找到 %s，WorkBuddy（办公）不可用；安装：npm install -g @tencent-ai/codebuddy-code", cfg.workbuddy_bin)
+        logger.warning(t("未找到 %s，WorkBuddy（办公）不可用；安装：npm install -g @tencent-ai/codebuddy-code",
+                         "WorkBuddy (office) unavailable: %s not found; install: npm install -g @tencent-ai/codebuddy-code"),
+                       cfg.workbuddy_bin)
     if not cfg.qoder_cwd_resolved.is_dir():
-        logger.warning("工作目录不存在: %s（可用 /cd 切换）", cfg.qoder_cwd_resolved)
+        logger.warning(t("工作目录不存在: %s（可用 /cd 切换）",
+                         "Working directory does not exist: %s (use /cd to switch)"),
+                       cfg.qoder_cwd_resolved)
 
 
 async def replay_pending(router: MessageRouter, gateway: Gateway, cfg: Config) -> None:
@@ -92,7 +107,9 @@ async def replay_pending(router: MessageRouter, gateway: Gateway, cfg: Config) -
     logger = logging.getLogger("main")
     channel = gateway.get(raw.get("im", ""))
     if channel is None:
-        logger.warning("交接消息的通道 %s 未注册，忽略唤醒消息", raw.get("im"))
+        logger.warning(t("交接消息的通道 %s 未注册，忽略唤醒消息",
+                         "Channel %s from the handoff message is not registered; ignoring the wake message"),
+                       raw.get("im"))
         return
     msg = InboundMessage(
         channel=channel,
@@ -110,7 +127,7 @@ async def replay_pending(router: MessageRouter, gateway: Gateway, cfg: Config) -
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline and not channel.connected:
         await asyncio.sleep(0.5)
-    logger.info("重放唤醒消息 im=%s chat=%s", msg.im, msg.chat_id)
+    logger.info(t("重放唤醒消息 im=%s chat=%s", "Replaying wake message im=%s chat=%s"), msg.im, msg.chat_id)
     await router.handle_msg(msg)
 
 
@@ -120,7 +137,8 @@ async def idle_monitor(router: MessageRouter, gateway: Gateway, cfg: Config) -> 
     while True:
         await asyncio.sleep(10)
         if router.is_idle(cfg.idle_exit_min * 60):
-            logger.info("空闲超过 %.0f 分钟，服务自动退出", cfg.idle_exit_min)
+            logger.info(t("空闲超过 %.0f 分钟，服务自动退出", "Idle for over %.0f minutes; service exiting"),
+                        cfg.idle_exit_min)
             await gateway.close()
             return
 
@@ -135,7 +153,8 @@ async def amain() -> None:
     # 单实例守卫：快捷方式与手动启动共用同一把锁，第二实例直接退出
     lock = acquire_instance_lock()
     if lock is None:
-        logger.warning("已有服务实例在运行，本次启动退出（同一机器人双连接会互踢）")
+        logger.warning(t("已有服务实例在运行，本次启动退出（同一机器人双连接会互踢）",
+                         "Another service instance is already running; exiting (duplicate bot connections would evict each other)"))
         return
 
     check_prereqs(cfg)
@@ -172,13 +191,16 @@ async def amain() -> None:
         if callable(mount):
             mount(admin_router)
 
-    logger.info("服务已启动：%d 个 IM 通道（%s），Agent：%s，工作目录 %s",
+    logger.info(t("服务已启动：%d 个 IM 通道（%s），Agent：%s，工作目录 %s",
+                  "Service started: %d IM channels (%s), agents: %s, working directory %s"),
                 len(gateway), ", ".join(gateway.channel_names),
-                ", ".join(f"{n}{'启用' if registry.is_active(n) else '停用'}" for n in registry.names),
+                ", ".join(f"{n}{t('启用', 'on') if registry.is_active(n) else t('停用', 'off')}"
+                          for n in registry.names),
                 cfg.qoder_cwd_resolved)
     if "webui" in gateway.channel_names:
         # 启动后直接给出页面地址，用户无需再去翻文档找端口
-        logger.info("Web 控制台：http://%s:%d/（聊天台 /chat.html）",
+        logger.info(t("Web 控制台：http://%s:%d/（聊天台 /chat.html）",
+                      "Web console: http://%s:%d/ (chat UI at /chat.html)"),
                     cfg.webui_host, cfg.webui_port)
 
     # 系统托盘：后台无窗口运行时，可从任务栏角落打开控制台或退出服务
@@ -188,7 +210,7 @@ async def amain() -> None:
             from im_agent_gateway.tray import start_tray
             tray_icon = start_tray(cfg, lambda: loop.call_soon_threadsafe(shutdown.set))
         except Exception as exc:  # 托盘只是便利功能，失败不能影响服务
-            logger.warning("托盘图标启动失败：%s", exc)
+            logger.warning(t("托盘图标启动失败：%s", "Failed to start tray icon: %s"), exc)
 
     try:
         run_task = asyncio.create_task(gateway.run())
@@ -204,9 +226,9 @@ async def amain() -> None:
         for task in done:
             task.result()  # 抛出异常（如有）
         if stop_task in done:
-            logger.info("收到退出请求，服务关闭")
+            logger.info(t("收到退出请求，服务关闭", "Shutdown requested; service closing"))
     except KeyboardInterrupt:
-        logger.info("收到退出信号")
+        logger.info(t("收到退出信号", "Received shutdown signal"))
     finally:
         if tray_icon is not None:
             tray_icon.stop()

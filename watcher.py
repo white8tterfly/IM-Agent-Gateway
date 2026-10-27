@@ -19,6 +19,7 @@ from im_agent_gateway.config import load_config
 from im_agent_gateway.gateway.handoff import dump
 from im_agent_gateway.gateway.registry import Gateway
 from im_agent_gateway.gateway.watch_http import WatchHttpServer
+from im_agent_gateway.i18n import t
 from im_agent_gateway.plugins import load_channel
 
 from main import setup_logging
@@ -46,7 +47,8 @@ def _service_running() -> bool:
         )
         return result.stdout.strip() not in ("", "0")
     except Exception:
-        logger.exception("检测服务进程失败，按未运行处理")
+        logger.exception(t("检测服务进程失败，按未运行处理",
+                           "Failed to detect the service process; assuming it is not running"))
         return False
 
 
@@ -77,10 +79,13 @@ async def _session(cfg) -> None:
         )
         try:
             holder.start()
-            logger.info("睡眠态托管已启动：http://%s:%d（唤醒后自动交还端口）",
+            logger.info(t("睡眠态托管已启动：http://%s:%d（唤醒后自动交还端口）",
+                          "Sleep-mode host started: http://%s:%d (port is handed over after wake)"),
                         cfg.webui_host, cfg.webui_port)
         except OSError:
-            logger.exception("睡眠态托管启动失败（端口 %s 可能被占用）", cfg.webui_port)
+            logger.exception(t("睡眠态托管启动失败（端口 %s 可能被占用）",
+                               "Failed to start sleep-mode host (port %s may be in use)"),
+                             cfg.webui_port)
             holder = None
 
     try:
@@ -88,7 +93,9 @@ async def _session(cfg) -> None:
             channel = load_channel(spec, cfg)
             if not channel.wake_listen:
                 # 通道自声明无需看门狗独立监听（如 HTTP 被动型 webui），跳过注册
-                logger.info("跳过通道 %s（自声明无需看门狗监听）", channel.name)
+                logger.info(t("跳过通道 %s（自声明无需看门狗监听）",
+                              "Skipping channel %s (declares no watchdog listening needed)"),
+                            channel.name)
                 continue
             gateway.register(channel)
             channel.on_message = on_message
@@ -99,7 +106,8 @@ async def _session(cfg) -> None:
             run_task = asyncio.create_task(gateway.run())
             tasks.add(run_task)
         else:
-            logger.info("没有需要监听的 IM 通道，仅提供睡眠态托管")
+            logger.info(t("没有需要监听的 IM 通道，仅提供睡眠态托管",
+                          "No IM channels to listen on; providing sleep-mode hosting only"))
         done, pending = await asyncio.wait(
             tasks, return_when=asyncio.FIRST_COMPLETED,
         )
@@ -110,9 +118,11 @@ async def _session(cfg) -> None:
         if woke and not already_running and wake_msg is not None:
             # 占位回复须在释放连接之前（此刻连接尚在，必达）
             try:
-                await wake_msg.channel.send_text(wake_msg, cfg.wake_reply)
+                await wake_msg.channel.send_text(
+                    wake_msg, cfg.wake_reply or t("正在唤醒…", "Waking up…"))
             except Exception:
-                logger.exception("占位回复失败，继续唤醒")
+                logger.exception(t("占位回复失败，继续唤醒",
+                                   "Failed to send placeholder reply; continuing to wake the service"))
             dump(wake_msg, cfg.wake_handoff_file_resolved)
 
         for task in pending:
@@ -121,7 +131,7 @@ async def _session(cfg) -> None:
             if run_task is not None and run_task in done:
                 run_task.result()  # 通道异常在此抛出
         except Exception:
-            logger.exception("看门狗通道退出")
+            logger.exception(t("看门狗通道退出", "Watchdog channel exited"))
         await gateway.close()
     finally:
         if holder is not None:
@@ -130,26 +140,28 @@ async def _session(cfg) -> None:
     if not (woke and not already_running):
         return
 
-    logger.info("唤醒服务：%s", cfg.service_cmd)
+    logger.info(t("唤醒服务：%s", "Waking service: %s"), cfg.service_cmd)
     proc = await asyncio.create_subprocess_shell(
         cfg.service_cmd, cwd=str(Path(__file__).parent),
         creationflags=_NO_WINDOW,
     )
     await proc.wait()
-    logger.info("服务已退出，重新监听")
+    logger.info(t("服务已退出，重新监听", "Service exited; listening again"))
 
 
 async def amain() -> None:
     cfg = load_config()
     setup_logging(cfg.log_level)
     if not cfg.watch_enabled:
-        logger.info("看门狗开关未开启，退出")
+        logger.info(t("看门狗开关未开启，退出", "Watchdog is disabled; exiting"))
         return
     if not cfg.watch_autostart:
         # 计划任务仍会在登录时拉起本进程，这里读配置后立即退出，即「不随开机启动」
-        logger.info("开机自动启动已关闭，本次不启动看门狗")
+        logger.info(t("开机自动启动已关闭，本次不启动看门狗",
+                      "Autostart on boot is disabled; not starting the watchdog"))
         return
-    logger.info("看门狗启动，监听通道：%s", ", ".join(cfg.channels))
+    logger.info(t("看门狗启动，监听通道：%s", "Watchdog started; listening on channels: %s"),
+                ", ".join(cfg.channels))
     while True:
         try:
             await _session(cfg)
@@ -158,7 +170,8 @@ async def amain() -> None:
         except KeyboardInterrupt:
             raise
         except Exception:
-            logger.exception("看门狗会话异常，稍后重连")
+            logger.exception(t("看门狗会话异常，稍后重连",
+                               "Watchdog session failed; reconnecting shortly"))
             await asyncio.sleep(5)
 
 

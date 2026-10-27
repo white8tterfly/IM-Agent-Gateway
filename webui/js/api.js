@@ -1,6 +1,8 @@
 // REST 接口封装与运行状态探测（在线 / 睡眠 / 离线 三态）
 // 后端端点见 im_agent_gateway/manage/api.py 与看门狗睡眠态托管
 
+import { getLang } from './i18n.js';
+
 // 会话令牌：服务每次启动随机生成，页面通过同源 /api/session 获取。
 // 所有 /api 请求带 X-WebUI-Token，防止任意网页跨站调用本机管理端点。
 let sessionToken = null;
@@ -18,10 +20,12 @@ export async function getToken(force = false) {
   return sessionToken;
 }
 
-// 实际发送：/api 请求自动附带令牌；睡眠态托管没有令牌接口，拿不到就不带
+// 实际发送：/api 请求自动附带令牌与语言；睡眠态托管没有令牌接口，拿不到就不带
+// 语言用自定义头 X-Ui-Language：Accept-Language 属浏览器禁止脚本改写的请求头，设了也会被丢弃
 async function send(url, opts) {
   const headers = new Headers(opts.headers || {});
   if (url.startsWith('/api/')) {
+    headers.set('X-Ui-Language', getLang());
     try {
       headers.set('X-WebUI-Token', await getToken());
     } catch (_) { /* 服务不可达（睡眠态）时由探测逻辑判定 */ }

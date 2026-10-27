@@ -25,6 +25,7 @@ from typing import Callable
 
 from ..base import AgentResult, BaseAgent
 from ..qoder.runner import resolve_cli_argv
+from ...i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ async def _kill_tree(proc: asyncio.subprocess.Process) -> None:
                 stderr=asyncio.subprocess.DEVNULL,
             )
         except Exception:
-            logger.debug("taskkill 失败 pid=%s", proc.pid)
+            logger.debug(t("taskkill 失败 pid=%s", "taskkill failed pid=%s"), proc.pid)
 
 
 def _step_note(step: dict) -> str:
@@ -97,8 +98,9 @@ def _step_note(step: dict) -> str:
         names.append(f"{name} {detail}".strip())
     label = "、".join(names)[:100]
     state = str(step.get("state") or "")
-    head = f"[Trae] 第 {step.get('step_number', '?')} 步完成（{state}）"
-    return f"{head}：{label}" if label else head
+    head = t(f"[Trae] 第 {step.get('step_number', '?')} 步完成（{state}）",
+             f"[Trae] step {step.get('step_number', '?')} done ({state})")
+    return t(f"{head}：{label}", f"{head}: {label}") if label else head
 
 
 class _TrajectoryReader:
@@ -151,7 +153,7 @@ class _TrajectoryReader:
             it += int(u.get("input_tokens") or 0)
             ot += int(u.get("output_tokens") or 0)
         if it or ot:
-            usage = f"tokens 输入 {it} / 输出 {ot}"
+            usage = t(f"tokens 输入 {it} / 输出 {ot}", f"tokens in {it} / out {ot}")
         return success, text, usage
 
 
@@ -160,8 +162,11 @@ class TraeAgent(BaseAgent):
 
     name = "trae"
     label = "Trae（编码）"
+    label_en = "Trae (Coding)"
     kind = "coding"
     routing_hint = "Trae 编码任务：代码生成、修复、重构、执行命令（另一个编码 Agent，可用 /agent trae 指定）"
+    routing_hint_en = ("Trae coding tasks: code generation, fixes, refactoring, running commands "
+                       "(another coding agent, select with /agent trae)")
     # 意图关键词：编码词表由 kind=coding 默认继承，这里只追加名字直达词
     routing_keywords = ("trae",)
 
@@ -193,7 +198,9 @@ class TraeAgent(BaseAgent):
         return self._cwd
 
     def start_hint(self, cwd: str = "", model: str = "") -> str:
-        return f"Trae 处理中（目录：{cwd or self._cwd}）\n"
+        folder = cwd or self._cwd
+        return t(f"· {self.display_label}处理中… 目录：{folder}\n\n",
+                 f"· {self.display_label} is working… dir: {folder}\n\n")
 
     async def submit(
         self,
@@ -213,7 +220,7 @@ class TraeAgent(BaseAgent):
             worker = asyncio.create_task(self._worker(chat_key, state))
             self._workers.add(worker)
             worker.add_done_callback(lambda t: self._workers.discard(t))
-        logger.info("会话 %s 已排队任务: %.120s", chat_key, query)
+        logger.info(t("会话 %s 已排队任务: %.120s", "Session %s queued task: %.120s"), chat_key, query)
         return task.done
 
     async def stop(self, chat_key: str) -> bool:
@@ -232,7 +239,7 @@ class TraeAgent(BaseAgent):
             state.stop_requested = False
             state.session_id = str(uuid.uuid4())
             state.history.clear()
-        logger.info("会话 %s 已重置", chat_key)
+        logger.info(t("会话 %s 已重置", "Session %s reset"), chat_key)
 
     def busy(self, chat_key: str) -> bool:
         state = self._chats.get(chat_key)
@@ -254,7 +261,7 @@ class TraeAgent(BaseAgent):
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # 兜底：队列不能因异常停摆
-                    logger.exception("会话 %s 任务执行异常", chat_key)
+                    logger.exception(t("会话 %s 任务执行异常", "Session %s task failed"), chat_key)
                     if not task.done.done():
                         task.done.set_result(AgentResult(ok=False, text="", error=str(exc)))
                 finally:
@@ -273,9 +280,10 @@ class TraeAgent(BaseAgent):
         state.current = None
         result = await self._run_process(state, task)
         state.current = None
-        logger.info("会话 %s 任务完成 ok=%s 输出 %d 字%s",
+        logger.info(t("会话 %s 任务完成 ok=%s 输出 %d 字%s",
+                      "Session %s task done ok=%s output %d chars%s"),
                     chat_key, result.ok, len(result.text),
-                    f"（{result.error}）" if result.error else "")
+                    t(f"（{result.error}）", f" ({result.error})") if result.error else "")
         state.history.append((task.query, result.text))
         del state.history[:-MAX_HISTORY_ROUNDS]
         if not task.done.done():
@@ -287,12 +295,13 @@ class TraeAgent(BaseAgent):
         """开源版无内置会话记忆，把最近几轮任务与结果拼进当前任务。"""
         if not state.history:
             return query
-        lines = ["【会话历史】（同一会话的先前任务与结果，供参考）"]
+        lines = [t("【会话历史】（同一会话的先前任务与结果，供参考）",
+                   "[Chat history] (earlier tasks and results in this chat, for reference)")]
         for i, (q, r) in enumerate(state.history, 1):
-            lines.append(f"{i}. 任务：{q[:200]}")
-            lines.append(f"   结果：{r[:MAX_HISTORY_CHARS]}")
+            lines.append(t(f"{i}. 任务：{q[:200]}", f"{i}. Task: {q[:200]}"))
+            lines.append(t(f"   结果：{r[:MAX_HISTORY_CHARS]}", f"   Result: {r[:MAX_HISTORY_CHARS]}"))
         lines.append("")
-        lines.append("【当前任务】")
+        lines.append(t("【当前任务】", "[Current task]"))
         lines.append(query)
         return "\n".join(lines)
 
@@ -324,7 +333,7 @@ class TraeAgent(BaseAgent):
         traj_file = self._traj_dir / f"{state.session_id}_{len(state.history) + 1}.json"
         traj_file.unlink(missing_ok=True)
         args = self._build_args(self._compose_query(state, task.query), task.model, traj_file)
-        logger.info("启动 trae-cli（轨迹 %s）", traj_file)
+        logger.info(t("启动 trae-cli（轨迹 %s）", "Starting trae-cli (trace %s)"), traj_file)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *resolve_cli_argv(args),
@@ -336,7 +345,9 @@ class TraeAgent(BaseAgent):
         except FileNotFoundError:
             return AgentResult(
                 ok=False, text="",
-                error=f"找不到 {self._bin}，请安装开源版 trae-agent（git clone bytedance/trae-agent + uv sync）",
+                error=t(f"找不到 {self._bin}，请安装开源版 trae-agent（git clone bytedance/trae-agent + uv sync）",
+                        f"Cannot find {self._bin}; install the open-source trae-agent "
+                        f"(git clone bytedance/trae-agent + uv sync)"),
             )
         state.current = proc
 
@@ -385,7 +396,8 @@ class TraeAgent(BaseAgent):
             await proc.wait()
             return AgentResult(
                 ok=False, text=reader.result()[1],
-                error=f"任务超时（>{self._timeout:.0f}s），已终止",
+                error=t(f"任务超时（>{self._timeout:.0f}s），已终止",
+                        f"Task timed out (>{self._timeout:.0f}s) and was stopped"),
             )
         except BaseException:
             await _kill_tree(proc)
@@ -402,17 +414,21 @@ class TraeAgent(BaseAgent):
         if _AUTH_REQUIRED_PAT.search("\n".join(stderr_lines + stdout_tail)):
             return AgentResult(
                 ok=False, text="",
-                error="模型端点认证失败，请检查 SILICONFLOW_API_KEY 配置",
+                error=t("模型端点认证失败，请检查 SILICONFLOW_API_KEY 配置",
+                        "Model endpoint authentication failed; check SILICONFLOW_API_KEY"),
             )
         if not success:
             detail = error_text or "\n".join(stdout_tail[-10:])[:400]
             if text:
                 return AgentResult(ok=False, text=text, usage=usage,
-                                   error=detail or "任务未成功完成")
-            return AgentResult(ok=False, text="", error=detail or f"trae-cli 退出码 {proc.returncode}")
+                                   error=detail or t("任务未成功完成", "Task did not complete successfully"))
+            return AgentResult(
+                ok=False, text="",
+                error=detail or t(f"trae-cli 退出码 {proc.returncode}",
+                                  f"trae-cli exited with {proc.returncode}"))
         if not text:
             return AgentResult(
                 ok=False, text="",
-                error=error_text[:400] or "trae-cli 无有效输出",
+                error=error_text[:400] or t("trae-cli 无有效输出", "trae-cli produced no usable output"),
             )
         return AgentResult(ok=True, text=text, usage=usage)

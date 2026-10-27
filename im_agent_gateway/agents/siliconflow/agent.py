@@ -14,6 +14,7 @@ from typing import Callable
 import httpx
 
 from ...config import Config
+from ...i18n import t
 from ..base import BaseAgent
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,10 @@ class SiliconFlowAgent(BaseAgent):
 
     name = "siliconflow"
     label = "SiliconFlow（聊天）"
+    label_en = "SiliconFlow (Chat)"
     kind = "chat"
     routing_hint = "日常聊天与通用问答：闲聊、知识问答、非编码话题"
+    routing_hint_en = "General chat and Q&A: casual talk, knowledge questions, non-coding topics"
 
     def __init__(self, config: Config) -> None:
         super().__init__()
@@ -76,7 +79,8 @@ class SiliconFlowAgent(BaseAgent):
         try:
             await old.aclose()
         except Exception:
-            logger.exception("关闭旧 SiliconFlow 客户端异常")
+            logger.exception(t("关闭旧 SiliconFlow 客户端异常",
+                               "Error while closing the old SiliconFlow client"))
 
     @property
     def available(self) -> bool:
@@ -88,7 +92,7 @@ class SiliconFlowAgent(BaseAgent):
         return self.cfg.sf_model
 
     def start_hint(self, cwd: str = "", model: str = "") -> str:
-        return f"SiliconFlow 回复中（模型：{model or self.cfg.sf_model}）…\n"
+        return t(f"· {self.display_label}回复中…\n\n", f"· {self.display_label} is replying…\n\n")
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -116,7 +120,8 @@ class SiliconFlowAgent(BaseAgent):
             worker = asyncio.create_task(self._worker(chat_key, state))
             self._workers.add(worker)
             worker.add_done_callback(lambda t: self._workers.discard(t))
-        logger.info("会话 %s 已排队 SF 请求: %.120s", chat_key, query)
+        logger.info(t("会话 %s 已排队 SF 请求: %.120s", "Session %s queued SF request: %.120s"),
+                    chat_key, query)
         return task.done
 
     async def stop(self, chat_key: str) -> bool:
@@ -133,7 +138,7 @@ class SiliconFlowAgent(BaseAgent):
         state = self._chats.get(chat_key)
         if state is not None:
             state.history.clear()
-        logger.info("会话 %s SF 历史已清空", chat_key)
+        logger.info(t("会话 %s SF 历史已清空", "Session %s SF history cleared"), chat_key)
 
     def busy(self, chat_key: str) -> bool:
         state = self._chats.get(chat_key)
@@ -170,7 +175,7 @@ class SiliconFlowAgent(BaseAgent):
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # 兜底：队列不能因异常停摆
-                    logger.exception("会话 %s SF 请求异常", chat_key)
+                    logger.exception(t("会话 %s SF 请求异常", "Session %s SF request failed"), chat_key)
                     if not task.done.done():
                         task.done.set_result(SFResult(ok=False, text="", error=str(exc)))
                 finally:
@@ -195,14 +200,15 @@ class SiliconFlowAgent(BaseAgent):
             result = await req_task
         except asyncio.CancelledError:
             if state.stop_requested:
-                result = SFResult(ok=False, text="", error="已手动终止")
+                result = SFResult(ok=False, text="", error=t("已手动终止", "Stopped by user"))
             else:
                 raise
         state.current = None
         logger.info(
-            "会话 %s SF 回复完成 ok=%s 输出 %d 字%s",
+            t("会话 %s SF 回复完成 ok=%s 输出 %d 字%s",
+              "Session %s SF reply done ok=%s output %d chars%s"),
             chat_key, result.ok, len(result.text),
-            f"（{result.error}）" if result.error else "",
+            t(f"（{result.error}）", f" ({result.error})") if result.error else "",
         )
         if not task.done.done():
             task.done.set_result(result)
@@ -265,11 +271,13 @@ class SiliconFlowAgent(BaseAgent):
                             if on_output:
                                 await on_output(text)
         except httpx.HTTPError as exc:
-            return SFResult(ok=False, text="", error=f"SiliconFlow 请求失败: {exc}")
+            return SFResult(ok=False, text="",
+                            error=t(f"SiliconFlow 请求失败: {exc}", f"SiliconFlow request failed: {exc}"))
 
         text = "".join(collected).strip()
         if not text:
-            return SFResult(ok=False, text="", error="SiliconFlow 返回空内容")
+            return SFResult(ok=False, text="",
+                            error=t("SiliconFlow 返回空内容", "SiliconFlow returned an empty reply"))
         state.history.append({"role": "assistant", "content": text})
         self._trim_history(state)
         return SFResult(ok=True, text=text, usage=self._usage_line(usage_raw))
@@ -291,9 +299,11 @@ class SiliconFlowAgent(BaseAgent):
         completion = tok("completion_tokens", "output_tokens")
         if prompt is None and completion is None:
             return None
-        return (
+        return t(
             f"tokens 输入 {prompt if prompt is not None else '?'} "
-            f"/ 输出 {completion if completion is not None else '?'}"
+            f"/ 输出 {completion if completion is not None else '?'}",
+            f"tokens in {prompt if prompt is not None else '?'} "
+            f"/ out {completion if completion is not None else '?'}",
         )
 
     @staticmethod

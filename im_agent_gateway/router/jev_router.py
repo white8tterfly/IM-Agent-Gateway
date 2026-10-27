@@ -15,6 +15,7 @@ import httpx
 
 from ..agents.base import BaseAgent
 from ..config import Config
+from ..i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ class JevRouter:
             try:
                 await old.aclose()
             except Exception:
-                logger.exception("关闭旧 Jev 客户端异常")
+                logger.exception(t("关闭旧 Jev 客户端异常", "Error while closing the old Jev client"))
 
     @property
     def available(self) -> bool:
@@ -83,7 +84,7 @@ class JevRouter:
                 "/systemone", headers=self._headers(), json=payload
             )
         except httpx.HTTPError as exc:
-            logger.warning("Jev %s请求失败: %s", tag, exc)
+            logger.warning(t("Jev %s请求失败: %s", "Jev %s request failed: %s"), tag, exc)
             return None
         if resp.status_code != 200:
             logger.warning("Jev %s HTTP %d: %.200s", tag, resp.status_code, resp.text)
@@ -91,7 +92,8 @@ class JevRouter:
         try:
             return resp.json()
         except ValueError:
-            logger.warning("Jev %s返回非法 JSON: %.200s", tag, resp.text)
+            logger.warning(t("Jev %s返回非法 JSON: %.200s", "Jev %s returned invalid JSON: %.200s"),
+                           tag, resp.text)
             return None
 
     def _parse_choice(self, data: dict, answer_key: str, candidates) -> str | None:
@@ -108,7 +110,8 @@ class JevRouter:
         cand = set(candidates)
         name = max(probs, key=probs.get) if probs else value
         if name not in cand:
-            logger.warning("Jev 决策返回未知候选 %r，忽略", name)
+            logger.warning(t("Jev 决策返回未知候选 %r，忽略",
+                             "Jev decision returned an unknown candidate %r; ignored"), name)
             return None
         try:
             confidence = probs.get(name) or float(answer.get("confidence") or 0.0)
@@ -151,11 +154,12 @@ class JevRouter:
             query, ANSWER_KEY, "根据消息内容判断应该交给哪个 Agent 处理",
             {a.name: a.route_description for a in agents},
         )
-        data = await self._ask(payload, "Agent 直选")
+        data = await self._ask(payload, t("Agent 直选", "agent selection"))
         if data is None:
             return None
         name = self._parse_choice(data, ANSWER_KEY, {a.name for a in agents})
-        logger.info("Jev 决策：%.60s → %s", query, name or "低置信度（降级）")
+        logger.info(t("Jev 决策：%.60s → %s", "Jev decision: %.60s → %s"),
+                    query, name or t("低置信度（降级）", "low confidence (fallback)"))
         return name
 
     # ---------- 第一问：用途决策 ----------
@@ -171,11 +175,12 @@ class JevRouter:
             query, KIND_ANSWER_KEY, "根据消息内容判断它属于哪一类用途",
             {k: KIND_DESCRIPTIONS.get(k, k) for k in kinds},
         )
-        data = await self._ask(payload, "用途决策")
+        data = await self._ask(payload, t("用途决策", "kind decision"))
         if data is None:
             return None
         kind = self._parse_choice(data, KIND_ANSWER_KEY, kinds)
-        logger.info("Jev 用途决策：%.60s → %s", query, kind or "低置信度（降级关键词）")
+        logger.info(t("Jev 用途决策：%.60s → %s", "Jev kind decision: %.60s → %s"),
+                    query, kind or t("低置信度（降级关键词）", "low confidence (keyword fallback)"))
         return kind
 
     # ---------- 第二问：复杂度档位决策 ----------
@@ -196,11 +201,12 @@ class JevRouter:
             query, COMPLEXITY_ANSWER_KEY, "根据消息内容判断问题的复杂程度",
             {lv: COMPLEXITY_DESCRIPTIONS.get(lv, lv) for lv in levels},
         )
-        data = await self._ask(payload, "复杂度决策")
+        data = await self._ask(payload, t("复杂度决策", "complexity decision"))
         if data is None:
             return None
         level = self._parse_choice(data, COMPLEXITY_ANSWER_KEY, levels)
-        logger.info("Jev 复杂度决策：%.60s → %s", query, level or "低置信度（取第一个）")
+        logger.info(t("Jev 复杂度决策：%.60s → %s", "Jev complexity decision: %.60s → %s"),
+                    query, level or t("低置信度（取第一个）", "low confidence (using the first)"))
         return level
 
     async def close(self) -> None:

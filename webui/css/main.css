@@ -128,6 +128,23 @@ body {
 
 .topbar .spacer { flex: 1; }
 
+/* 语言切换按钮：顶栏右侧的小胶囊，显示点一下会切到的语言 */
+.lang-btn {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform 0.25s var(--spring), background 0.2s, color 0.2s;
+}
+
+.lang-btn:hover { background: var(--brand-soft); color: var(--brand-deep); }
+.lang-btn:active { transform: scale(0.95); }
+
 /* 状态徽章：圆点用 currentColor，跟随三态变色 */
 .badge {
   display: inline-flex;
@@ -419,7 +436,7 @@ body.ready .card { animation: none; }
 .agent-row:last-child { border-bottom: none; }
 .agent-row:hover { background: var(--card-soft); }
 
-/* 智能体标识：用用途首字着色的小方块，扫读时比纯文字更快区分 */
+/* 智能体标识：名称首字的小方块，用途靠底色区分，避免与用途标签重复 */
 .agent-avatar {
   flex-shrink: 0;
   width: 38px;
@@ -668,12 +685,12 @@ body.ready .card { animation: none; }
 
 .task-list { font-size: 13px; color: var(--muted); }
 
-/* 三列：状态章 / 任务名 / 来源与耗时。左对齐扫读，细节靠右收口 */
+/* 两行：状态章与任务名同排，来源与耗时折到下一行整宽铺开，窄卡片里也能完整显示 */
 .task-item {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) auto;
+  grid-template-columns: 58px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: 6px 12px;
   margin: 0 -10px;
   padding: 12px 10px;
   border-bottom: 1px solid var(--line-soft);
@@ -706,11 +723,11 @@ body.ready .card { animation: none; }
 }
 
 .task-meta {
+  grid-column: 2;
   font-size: 11.5px;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1772,9 +1789,8 @@ details summary:active { transform: scale(0.97); }
   #status-body .metric-label { letter-spacing: 0.12em; }
   .tab-panel[data-panel="overview"] .card:nth-child(1)::after { display: none; }
 
-  /* 任务行折成两行：状态章与任务名同排，来源与耗时退到第二行 */
-  .task-item { grid-template-columns: 56px minmax(0, 1fr); gap: 6px 10px; }
-  .task-meta { grid-column: 2; white-space: normal; }
+  /* 任务行在窄屏收紧状态章宽度与间距 */
+  .task-item { grid-template-columns: 52px minmax(0, 1fr); gap: 6px 10px; }
 
   /* 日志工具栏整行铺开：搜索独占一行，其余按钮换行排列 */
   .log-tools { width: 100%; margin-left: 0; }

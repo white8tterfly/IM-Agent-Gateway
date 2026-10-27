@@ -51,7 +51,9 @@ AI 生成的代码常带以下特征，本项目一律禁止：
 
 - 按功能拆分独立提交，一次提交只做一件事
 - 提交信息用中文，说明「做了什么、为什么」，避免"update / 小改 / fix 若干"这类空泛措辞
-- 提交身份统一使用 white8tterfly <464177580@qq.com>
+- 提交身份统一使用 white8tterfly <464177580@qq.com>，作者与提交者（author / committer）都必须是该身份，不得出现开发工具的名称或代提交身份
+- 提交信息不得添加 `Co-authored-by` 之类的工具署名 trailer
+- 开发工具的提交入口会把 committer 写成工具身份，导致 GitHub 提交列表显示两个名字；提交一律在终端执行 `git commit`，提交后用 `git log -1 --format='%an <%ae> / %cn <%ce>'` 确认两者一致
 
 ## 连通性验证
 

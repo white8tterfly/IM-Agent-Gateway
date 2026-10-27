@@ -17,6 +17,7 @@ from typing import Callable
 from ..agents.registry import AgentRegistry
 from ..config import PROJECT_ROOT, Config
 from ..gateway.registry import Gateway
+from ..i18n import t
 from ..router.dispatcher import MessageRouter
 
 # 最近任务环形缓冲条数
@@ -71,7 +72,9 @@ def config_grouped_view(cfg: Config, meta: list | None = None) -> dict:
         # 是否支持即时生效：键在 HOT_PARSERS 中 = 改完写回内存立即生效；否则需重启
         hot = it.key in HOT_PARSERS
         row = {
-            "key": it.key, "field": it.field, "label": it.label, "desc": it.desc,
+            "key": it.key, "field": it.field,
+            "label": t(it.label, it.label_en or it.label),
+            "desc": t(it.desc, it.desc_en or it.desc),
             "sensitive": it.sensitive, "type": it.type, "value": shown,
             "hot": hot,
         }
@@ -86,7 +89,7 @@ def config_grouped_view(cfg: Config, meta: list | None = None) -> dict:
         shown = "******" if (sensitive and val) else _format_config_value(f.name, val)
         unknown.append({
             "key": f.name.upper(), "field": f.name, "label": f.name,
-            "desc": "（暂无说明）", "sensitive": sensitive, "type": "text",
+            "desc": t("（暂无说明）", "(no description)"), "sensitive": sensitive, "type": "text",
             "value": shown,
             "hot": f.name.upper() in HOT_PARSERS,
         })
@@ -150,6 +153,8 @@ class ManageService:
             ]
         return {
             "state": "running",
+            # 配置里持久化的语言（不是本次请求的临时语言）：前端首次访问据此初始化
+            "language": self.cfg.language,
             "channels": channels,
             "agents": {
                 "total": len(self.registry.agents),
@@ -167,7 +172,7 @@ class ManageService:
         return [
             {
                 "name": a.name,
-                "label": a.label,
+                "label": a.display_label,
                 "kind": a.kind,
                 "complexity": a.complexity,
                 "active": self.registry.is_active(a.name),

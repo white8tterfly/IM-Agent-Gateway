@@ -225,6 +225,7 @@ python main.py
 
 | 常用配置 | 说明 | 默认值 |
 | --- | --- | --- |
+| `LANGUAGE` | 界面语言：`zh` 中文 / `en` English，页面与机器人回复随之切换 | `zh` |
 | `CHANNELS` | 加载哪些 IM 通道 | `wecom,feishu` |
 | `AGENTS` | 加载哪些 Agent | `siliconflow,qoder,workbuddy,trae` |
 | `DEFAULT_AGENT` | 自动路由不可用时的默认 Agent | `siliconflow` |
@@ -234,7 +235,7 @@ python main.py
 | `WATCH_ENABLED` | 消息唤醒总开关 | `0` |
 | `ALLOWED_USERS` | 允许使用机器人的用户白名单，留空不限制 | 空 |
 
-完整配置项、默认值与用途说明见 [.env.example](./.env.example)。修改配置有三种等价方式：直接编辑 `.env`、在 Web 管理台修改、或用 `python manage.py config set <键> <值>`。
+完整配置项、默认值与用途说明见 [.env.example](./.env.example)。修改配置有三种等价方式：直接编辑 `.env`、在 Web 管理台修改、或用 `python manage.py config set <键> <值>`。中英文可在管理台与聊天台右上角随时切换，切换结果会写回 `LANGUAGE`（即时生效）。
 
 ```bash
 python manage.py config show    # 查看当前生效配置

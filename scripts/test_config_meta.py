@@ -48,8 +48,8 @@ def main() -> None:
         "AGENTS", "ENABLED_AGENTS", "DEFAULT_AGENT", "AUTO_ROUTE", "JEV_ROUTE",
         "AGENT_KINDS", "AGENT_COMPLEXITY", "COMPLEXITY_ROUTE", "ALLOWED_USERS",
         "IDLE_EXIT", "IDLE_EXIT_MIN", "WAKE_REPLY", "WATCH_AUTOSTART",
-        "WORKBUDDY_CWD", "WEBUI_ENABLED", "FIRST_USE_GUIDE", "CHANNELS",
-    ], "常用配置 17 项前置（其余全部为高级）")
+        "WORKBUDDY_CWD", "WEBUI_ENABLED", "FIRST_USE_GUIDE", "LANGUAGE", "CHANNELS",
+    ], "常用配置 18 项前置（其余全部为高级）")
     bool_keys = {it.key for it in meta if it.type == "bool"}
     check(bool_keys == {
         "AUTO_ROUTE", "JEV_ROUTE", "COMPLEXITY_ROUTE", "IDLE_EXIT",

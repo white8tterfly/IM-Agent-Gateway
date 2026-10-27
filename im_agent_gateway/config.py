@@ -10,6 +10,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from . import i18n
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -104,6 +106,10 @@ class Config:
     # 首次使用引导：用户第一次发消息时回一条简短指令说明（同一用户只发一次）
     first_use_guide: bool = True
 
+    # ---- 界面语言 ----
+    # zh=中文 / en=English：页面文案与机器人回复随之切换（网页可按请求切换）
+    language: str = "zh"
+
     # ---- 消息与心跳 ----
     stream_interval_sec: float = 1.0
     stream_chunk_size: int = 200
@@ -119,7 +125,7 @@ class Config:
     watch_autostart: bool = True
     idle_exit: bool = False          # 服务空闲自动退开关：1=空闲超时退出，0=常驻
     idle_exit_min: float = 10.0      # 空闲判定分钟数（仅 idle_exit=True 生效）
-    wake_reply: str = "正在唤醒…"    # 看门狗唤醒前的占位回复文案
+    wake_reply: str = ""             # 看门狗唤醒前的占位回复文案；空 = 按 LANGUAGE 自动选择
     service_cmd: str = "python main.py"  # 看门狗拉起服务所用命令
     wake_handoff_file: str = ".wake_pending.json"  # 唤醒消息交接文件（相对项目根）
     watch_http_enabled: bool = False  # 睡眠态托管开关：睡眠期间占住 webui 端口提供页面与唤醒按钮
@@ -207,10 +213,12 @@ def _parse_agent_map(raw: str, allowed: tuple[str, ...], field_label: str) -> di
         name, _, value = item.partition("=")
         name, value = name.strip(), value.strip().lower()
         if not name or not value:
-            logger.warning("%s 含空项 %r，已忽略", field_label, item)
+            logger.warning(i18n.t("%s 含空项 %r，已忽略", "%s contains an empty entry %r; ignored"),
+                           field_label, item)
             continue
         if value not in allowed:
-            logger.warning("%s 中 %s=%s 非法（允许值：%s），已忽略",
+            logger.warning(i18n.t("%s 中 %s=%s 非法（允许值：%s），已忽略",
+                                  "%s has invalid %s=%s (allowed: %s); ignored"),
                            field_label, name, value, "/".join(allowed))
             continue
         out[name] = value
@@ -253,6 +261,8 @@ HOT_PARSERS: dict[str, tuple[str, "object"]] = {
     "ALLOWED_USERS": ("allowed_users", lambda v: {u.strip() for u in v.split(",") if u.strip()}),
     "IDLE_EXIT_MIN": ("idle_exit_min", lambda v: float(v or 10)),
     "FIRST_USE_GUIDE": ("first_use_guide", lambda v: v.lower() not in ("0", "false", "no")),
+    # 界面语言：热更新后同时切换全局默认语言
+    "LANGUAGE": ("language", lambda v: i18n.normalize(v)),
     # WAKE_REPLY 由看门狗独立进程读取，服务进程改 cfg 不影响，故不热生效
     # WorkBuddy（cwd / model / permission / timeout 每次任务读 cfg）
     "WORKBUDDY_CWD": ("workbuddy_cwd", lambda v: v or str(PROJECT_ROOT)),
@@ -302,8 +312,13 @@ def apply_hot_config(cfg: Config, key: str, value: str) -> bool:
     try:
         setattr(cfg, field, parser(value))
     except (ValueError, TypeError):
-        logger.warning("配置 %s 热更新解析失败，保留原值：%r", key, value)
+        logger.warning(i18n.t("配置 %s 热更新解析失败，保留原值：%r",
+                              "Failed to parse hot-reloaded config %s; keeping the old value: %r"),
+                       key, value)
         return False
+    # 语言是进程级全局状态，写回 cfg 后同步给 i18n
+    if field == "language":
+        i18n.set_language(getattr(cfg, field))
     return True
 
 
@@ -358,6 +373,7 @@ def load_config(env_file: Path | None = None) -> Config:
         allowed_users={u.strip() for u in _env("ALLOWED_USERS").split(",") if u.strip()},
         # 留空按开启处理：老 .env 没有这一项时也提供首次使用提示
         first_use_guide=_env("FIRST_USE_GUIDE", "1").lower() not in ("0", "false", "no"),
+        language=i18n.normalize(_env("LANGUAGE") or i18n.DEFAULT),
         stream_interval_sec=float(_env("STREAM_INTERVAL_SEC") or 1.0),
         stream_chunk_size=int(_env("STREAM_CHUNK_SIZE") or 200),
         heartbeat_interval_sec=float(_env("HEARTBEAT_INTERVAL_SEC") or 30.0),
@@ -367,7 +383,7 @@ def load_config(env_file: Path | None = None) -> Config:
         watch_autostart=_env("WATCH_AUTOSTART").lower() not in ("0", "false", "no"),
         idle_exit=_env("IDLE_EXIT").lower() in ("1", "true", "yes"),
         idle_exit_min=float(_env("IDLE_EXIT_MIN") or 10),
-        wake_reply=_env("WAKE_REPLY") or "正在唤醒…",
+        wake_reply=_env("WAKE_REPLY"),
         service_cmd=_env("SERVICE_CMD") or "python main.py",
         wake_handoff_file=_env("WAKE_HANDOFF_FILE") or ".wake_pending.json",
         watch_http_enabled=_env("WATCH_HTTP_ENABLED").lower() in ("1", "true", "yes"),
@@ -381,6 +397,9 @@ def load_config(env_file: Path | None = None) -> Config:
 
     # webui 接入开关收敛到 CHANNELS 声明（放在必填校验前：关闭态不因残留声明误接入）
     cfg.apply_webui_switch()
+
+    # 语言是进程级全局状态：配置就绪后立即生效，之后启动的通道 / 任务都按它取文案
+    i18n.set_language(cfg.language)
 
     # 默认 Agent 须在 AGENTS 声明中（注册制校验），不在则回退到声明列表第一个
     if cfg.default_agent not in cfg.agents:

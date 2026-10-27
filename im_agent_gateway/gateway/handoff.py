@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from .base import InboundMessage
+from ..i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +58,13 @@ def load(path: Path) -> dict | None:
         if isinstance(data, dict):
             raw = data
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("交接文件读取失败，已忽略：%s", exc)
+        logger.warning(t("交接文件读取失败，已忽略：%s", "Failed to read handoff file; ignored: %s"), exc)
     finally:
         try:
             path.unlink()
         except OSError:
             pass
     if not raw or raw.get("version") != VERSION:
-        logger.warning("交接文件格式不识别，已忽略")
+        logger.warning(t("交接文件格式不识别，已忽略", "Unrecognized handoff file format; ignored"))
         return None
     return raw

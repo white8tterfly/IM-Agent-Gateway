@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Awaitable, Callable, ClassVar
 
+from ..i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,11 +38,13 @@ class BaseAgent(ABC):
     """Agent 基类：实现后 register 即接入路由。"""
 
     name: ClassVar[str] = ""      # 注册名，如 "qoder" / "siliconflow"
-    label: ClassVar[str] = ""     # 展示名，如 "Qoder CN（编码）"
+    label: ClassVar[str] = ""     # 中文展示名，如 "Qoder CN（编码）"
+    label_en: ClassVar[str] = ""  # 英文展示名，如 "Qoder CN (Coding)"；空则沿用中文
     # 用途三值（两级路由第一级）："chat"=对话；"coding"=编码；"office"=办公。
     # 类默认可被 .env 的 AGENT_KINDS 按实例覆写，故不用 ClassVar 限定。
     kind: str = "chat"
     routing_hint: ClassVar[str] = ""  # 决策路由（Jev）的候选描述；空串则按 kind 生成默认
+    routing_hint_en: ClassVar[str] = ""  # 候选描述的英文版；空则沿用中文
     # 意图关键词（关键字路由用）：Jev 未配置/失败/低置信时，按这些词对消息做简单
     # 命中计分选路。不声明的 coding Agent 默认继承内置编码词表，其余默认为空。
     routing_keywords: ClassVar[tuple[str, ...]] = ()
@@ -52,6 +56,11 @@ class BaseAgent(ABC):
         self.complexity: str = ""
 
     # ---------- 元信息 ----------
+
+    @property
+    def display_label(self) -> str:
+        """当前语言下的展示名。"""
+        return t(self.label, self.label_en or self.label)
 
     @property
     def available(self) -> bool:
@@ -84,12 +93,14 @@ class BaseAgent(ABC):
     def route_description(self) -> str:
         """供 Jev 决策路由使用的候选描述。"""
         if self.routing_hint:
-            return self.routing_hint
+            return t(self.routing_hint, self.routing_hint_en or self.routing_hint)
         if self.kind == "coding":
-            return "编码任务：写代码、修复 bug、运行命令、git 操作、仓库文件读写"
+            return t("编码任务：写代码、修复 bug、运行命令、git 操作、仓库文件读写",
+                     "Coding tasks: write code, fix bugs, run commands, git operations, repo file access")
         if self.kind == "office":
-            return "办公任务：文档、表格、PPT 等办公文件处理与办公自动化"
-        return "日常聊天与通用问答"
+            return t("办公任务：文档、表格、PPT 等办公文件处理与办公自动化",
+                     "Office tasks: documents, spreadsheets, slides and office automation")
+        return t("日常聊天与通用问答", "General chat and everyday questions")
 
     @property
     def default_model(self) -> str:
@@ -147,10 +158,11 @@ class BaseAgent(ABC):
     def commands(self) -> list[CommandSpec]:
         """该 Agent 提供的指令集（子类可追加特有指令）。"""
         return [
-            CommandSpec("/model <模型>", "切换本会话模型（/models 查看可用列表）"),
-            CommandSpec("/models", "列出可用模型"),
-            CommandSpec("/stop", "终止当前正在执行的任务"),
-            CommandSpec("/reset", "清空会话记忆，开启新会话"),
+            CommandSpec("/model <模型>", t("切换本会话模型（/models 查看可用列表）",
+                                          "Switch the model for this chat (/models to list)")),
+            CommandSpec("/models", t("列出可用模型", "List available models")),
+            CommandSpec("/stop", t("终止当前正在执行的任务", "Stop the running task")),
+            CommandSpec("/reset", t("清空会话记忆，开启新会话", "Clear this chat and start a new session")),
         ]
 
     async def handle_command(
@@ -159,40 +171,47 @@ class BaseAgent(ABC):
         """处理 Agent 指令；返回是否已处理。子类先处理特有指令，剩余交回 super()。"""
         if cmd == "/model":
             if not arg:
-                await send("用法：/model <模型名>，作用于当前会话的 Agent（/models 查看可用列表）")
+                await send(t("用法：/model <模型名>，作用于当前会话的 Agent（/models 查看可用列表）",
+                             "Usage: /model <name>, applies to this chat's agent (/models to list)"))
                 return True
             self._models[chat_key] = arg
-            await send(f"{self.label} 模型已切换为 {arg}（下次任务生效）")
+            await send(t(f"{self.display_label} 模型已切换为 {arg}（下次任务生效）",
+                         f"{self.display_label} model switched to {arg} (applies to the next task)"))
             return True
         if cmd == "/models":
             try:
                 models = await self.list_models()
             except asyncio.TimeoutError:
-                await send("获取模型列表超时，请稍后重试")
+                await send(t("获取模型列表超时，请稍后重试", "Timed out fetching models, please retry later"))
                 return True
             except Exception as exc:
-                logger.exception("获取模型列表失败（%s）", self.name)
-                await send(f"获取模型列表失败：{exc}")
+                logger.exception(t("获取模型列表失败（%s）", "Failed to fetch the model list (%s)"), self.name)
+                await send(t(f"获取模型列表失败：{exc}", f"Failed to fetch models: {exc}"))
                 return True
             if not models:
-                await send("未获取到模型列表，请确认该 Agent 已正确配置并登录")
+                await send(t("未获取到模型列表，请确认该 Agent 已正确配置并登录",
+                             "No models returned; make sure this agent is configured and signed in"))
                 return True
-            current = self.model_for(chat_key) or self.default_model or "默认"
-            lines = [f"{self.label} 可用模型（前 30 个，共 {len(models)}）："]
+            current = self.model_for(chat_key) or self.default_model or t("默认", "default")
+            lines = [t(f"{self.display_label} 可用模型（前 30 个，共 {len(models)}）：",
+                       f"{self.display_label} models (first 30 of {len(models)}):")]
             for name in models[:30]:
-                mark = " ← 当前会话" if name.lower() == current.lower() else ""
+                mark = t(" ← 当前会话", " ← current") if name.lower() == current.lower() else ""
                 lines.append(f"• {name}{mark}")
-            lines.append(f"\n当前使用: {current}（/model <模型名> 切换）")
+            lines.append(t(f"\n当前使用: {current}（/model <模型名> 切换）",
+                           f"\nCurrent: {current} (use /model <name> to switch)"))
             await send("\n".join(lines))
             return True
         if cmd == "/stop":
             stopped = await self.stop(chat_key)
-            await send("已终止当前任务" if stopped else "当前没有正在执行的任务")
+            await send(t("已终止当前任务", "Task stopped") if stopped
+                       else t("当前没有正在执行的任务", "No task is running"))
             return True
         if cmd == "/reset":
             await self.reset(chat_key)
             self._models.pop(chat_key, None)
-            await send("会话已重置，下一条消息将开启新会话")
+            await send(t("会话已重置，下一条消息将开启新会话",
+                         "Chat reset; the next message starts a new session"))
             return True
         return False
 
@@ -200,4 +219,4 @@ class BaseAgent(ABC):
 
     def start_hint(self, cwd: str = "", model: str = "") -> str:
         """任务开始时的提示语（路由层在 submit 前推送给用户）。"""
-        return f"{self.label} 处理中…\n"
+        return t(f"· {self.display_label}处理中…\n\n", f"· {self.display_label} is working…\n\n")

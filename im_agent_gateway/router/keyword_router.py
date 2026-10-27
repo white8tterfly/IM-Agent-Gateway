@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 
 from ..agents.base import BaseAgent
+from ..i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +75,10 @@ class KeywordRouter:
                 best_score = score
                 best_name = agent.name
         if best_name is None:
-            logger.debug("关键字路由无命中：%.60s", query)
+            logger.debug(t("关键字路由无命中：%.60s", "Keyword routing: no match for %.60s"), query)
             return None
-        logger.info("关键字路由：%.60s → %s（得分 %d）", query, best_name, best_score)
+        logger.info(t("关键字路由：%.60s → %s（得分 %d）",
+                      "Keyword routing: %.60s → %s (score %d)"), query, best_name, best_score)
         return best_name
 
     def route_kind(self, query: str, kinds: list[str]) -> str | None:
@@ -102,7 +104,8 @@ class KeywordRouter:
                 best_score = score
                 best_kind = kind
         if best_kind is None:
-            logger.debug("用途级关键字路由无命中：%.60s", query)
+            logger.debug(t("用途级关键字路由无命中：%.60s", "Kind-level keyword routing: no match for %.60s"), query)
             return None
-        logger.info("用途级关键字路由：%.60s → %s（得分 %d）", query, best_kind, best_score)
+        logger.info(t("用途级关键字路由：%.60s → %s（得分 %d）",
+                      "Kind-level keyword routing: %.60s → %s (score %d)"), query, best_kind, best_score)
         return best_kind

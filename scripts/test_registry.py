@@ -13,6 +13,7 @@ from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundEvent, InboundMessage
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.i18n import set_language
 from im_agent_gateway.router.dispatcher import MessageRouter
 
 
@@ -172,6 +173,7 @@ async def main() -> None:
 
     # ===== 三、路由：registry 分发 / fallback / 运行时开关命令 =====
     cfg = load_config()
+    set_language("zh")  # 断言中文文案：固定语言，避免受本机 .env 的 LANGUAGE 影响
     # /agent on|off 会写回 .env：测试期间指向临时文件，避免污染真实配置
     fd, tmp_env = tempfile.mkstemp(suffix=".env")
     os.close(fd)
@@ -204,7 +206,7 @@ async def main() -> None:
 
     # 任务结尾摘要：Agent / 模型（无 usage 数据时不附带用量）
     last_finish = [s for s in ch1.sent if s.startswith("[stream:True]")][-1]
-    check("—— 聊天 Fake · 模型 fake-model" in last_finish, "任务结尾附上 Agent/模型摘要")
+    check("· 模型 fake-model" in last_finish, "任务结尾附上模型摘要")
 
     # 运行时开启 fake_code 后，编码意图命中它
     check(registry.set_active("fake_code", True) is None, "set_active 开启成功返回 None")

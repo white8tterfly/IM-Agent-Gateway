@@ -16,6 +16,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from ..i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,7 @@ def _make_handler(directory: Path, on_wake: Callable[[], None]):
                 try:
                     on_wake()
                 except Exception:
-                    logger.exception("唤醒回调执行失败")
+                    logger.exception(t("唤醒回调执行失败", "Wake callback failed"))
                 self._json({"ok": True})
                 return
             self.send_error(404)

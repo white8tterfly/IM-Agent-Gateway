@@ -9,12 +9,13 @@
 <body>
 
 <header class="topbar">
-  <div class="logo">IM-Agent Gateway 控制台</div>
+  <div class="logo" data-i18n="IM-Agent Gateway 控制台||IM-Agent Gateway Console">IM-Agent Gateway 控制台</div>
   <nav>
-    <a href="index.html" class="current">管理台</a>
-    <a href="chat.html">聊天台</a>
+    <a href="index.html" class="current" data-i18n="管理台||Admin">管理台</a>
+    <a href="chat.html" data-i18n="聊天台||Chat">聊天台</a>
   </nav>
   <div class="spacer"></div>
+  <button id="lang-btn" type="button" class="lang-btn" title="Switch language">EN</button>
   <span id="state-badge" class="badge hidden">检测中</span>
 </header>
 
@@ -23,8 +24,8 @@
   <div class="panel">
     <h1 id="overlay-title">服务正在休息</h1>
     <p id="overlay-text">服务暂时没有在运行，你可以把它叫醒。</p>
-    <button id="wake-btn" class="btn big">点击唤醒</button>
-    <p id="overlay-tip" class="overlay-tip hidden">正在尝试叫醒服务，请稍等…</p>
+    <button id="wake-btn" class="btn big" data-i18n="点击唤醒||Wake up">点击唤醒</button>
+    <p id="overlay-tip" class="overlay-tip hidden" data-i18n="正在尝试叫醒服务，请稍等…||Waking the service, please wait…">正在尝试叫醒服务，请稍等…</p>
   </div>
 </div>
 
@@ -32,58 +33,60 @@
 
   <!-- 页签导航：概览 / 配置 / 运行日志（日志放最后，属于排查时才看的内容） -->
   <nav class="tabs" role="tablist">
-    <button class="tab current" data-tab="overview" role="tab">概览</button>
-    <button class="tab" data-tab="config" role="tab">配置</button>
-    <button class="tab" data-tab="logs" role="tab">运行日志</button>
+    <button class="tab current" data-tab="overview" role="tab" data-i18n="概览||Overview">概览</button>
+    <button class="tab" data-tab="config" role="tab" data-i18n="配置||Settings">配置</button>
+    <button class="tab" data-tab="logs" role="tab" data-i18n="运行日志||Logs">运行日志</button>
   </nav>
 
   <!-- 概览页签：运行状态 + 智能体 + 任务 -->
   <div class="tab-panel" data-panel="overview">
     <!-- 运行状态 -->
     <section class="card">
-      <h2>运行状态</h2>
+      <h2 data-i18n="运行状态||Status">运行状态</h2>
       <div id="status-body">
-        <p class="empty-note">正在获取…</p>
+        <p class="empty-note" data-i18n="正在获取…||Loading…">正在获取…</p>
       </div>
     </section>
 
     <!-- Agent 服务开关 -->
     <section class="card">
-      <h2>智能体服务 <span id="agent-count" class="count"></span></h2>
+      <h2><span data-i18n="智能体服务||Agents">智能体服务</span> <span id="agent-count" class="count"></span></h2>
       <div id="agent-list"></div>
     </section>
 
     <!-- 任务 -->
     <section class="card">
-      <h2>任务 <span id="task-count" class="count"></span></h2>
-      <div id="task-list" class="task-list"><p class="empty-note">正在获取…</p></div>
+      <h2><span data-i18n="任务||Tasks">任务</span> <span id="task-count" class="count"></span></h2>
+      <div id="task-list" class="task-list"><p class="empty-note" data-i18n="正在获取…||Loading…">正在获取…</p></div>
     </section>
   </div>
 
   <!-- 配置页签：左侧分组导航 + 右侧清单（搜索、筛选、行内编辑） -->
   <div class="tab-panel hidden" data-panel="config">
     <aside class="config-rail" aria-label="配置分组导航">
-      <p class="rail-title">配置分组</p>
+      <p class="rail-title" data-i18n="配置分组||Groups">配置分组</p>
       <nav id="config-nav" class="rail-nav"></nav>
       <p id="config-rail-summary" class="rail-summary"></p>
     </aside>
 
     <section class="card config-card">
       <div class="config-head">
-        <h2>配置</h2>
-        <p class="config-sub">保存后写回本机 .env；只有真的改了某项、且该项需要重启时，才会在行内标出。</p>
+        <h2 data-i18n="配置||Settings">配置</h2>
+        <p class="config-sub" data-i18n="保存后写回本机 .env；只有真的改了某项、且该项需要重启时，才会在行内标出。||Saved to the local .env file; only changed items that need a restart are flagged inline.">保存后写回本机 .env；只有真的改了某项、且该项需要重启时，才会在行内标出。</p>
       </div>
 
       <div class="config-toolbar">
         <label class="config-search">
           <input id="config-search" type="search" placeholder="搜索名称、说明、键名或当前值"
+                 data-i18n="搜索名称、说明、键名或当前值||Search name, description, key or value"
+                 data-i18n-attr="placeholder"
                  autocomplete="off" spellcheck="false">
         </label>
         <div id="config-filters" class="config-filters" role="group" aria-label="按类型筛选">
-          <button type="button" class="chip current" data-filter="all">全部</button>
-          <button type="button" class="chip" data-filter="hot">即时生效</button>
-          <button type="button" class="chip" data-filter="cold">重启后生效</button>
-          <button type="button" class="chip" data-filter="bool">开关项</button>
+          <button type="button" class="chip current" data-filter="all" data-i18n="全部||All">全部</button>
+          <button type="button" class="chip" data-filter="hot" data-i18n="即时生效||Live">即时生效</button>
+          <button type="button" class="chip" data-filter="cold" data-i18n="重启后生效||On restart">重启后生效</button>
+          <button type="button" class="chip" data-filter="bool" data-i18n="开关项||Toggles">开关项</button>
         </div>
         <p id="config-count" class="config-count"></p>
       </div>
@@ -91,8 +94,8 @@
       <div id="config-list"></div>
 
       <div id="config-empty" class="config-empty hidden">
-        <p>没有找到匹配的配置</p>
-        <button type="button" id="config-clear" class="btn ghost small">清空筛选</button>
+        <p data-i18n="没有找到匹配的配置||No matching settings">没有找到匹配的配置</p>
+        <button type="button" id="config-clear" class="btn ghost small" data-i18n="清空筛选||Clear filters">清空筛选</button>
       </div>
     </section>
   </div>
@@ -101,26 +104,28 @@
   <div class="tab-panel hidden" data-panel="logs">
     <section class="card log-card">
       <div class="log-head">
-        <h2>运行日志 <span id="log-meta" class="count"></span></h2>
+        <h2><span data-i18n="运行日志||Logs">运行日志</span> <span id="log-meta" class="count"></span></h2>
         <div class="log-tools">
           <label class="log-search">
-            <input id="log-filter" type="search" placeholder="过滤关键字" autocomplete="off" spellcheck="false">
+            <input id="log-filter" type="search" placeholder="过滤关键字"
+                   data-i18n="过滤关键字||Filter keyword" data-i18n-attr="placeholder"
+                   autocomplete="off" spellcheck="false">
           </label>
           <label class="log-picker">
-            <span>行数</span>
+            <span data-i18n="行数||Lines">行数</span>
             <select id="log-lines">
               <option value="200">200</option>
               <option value="500">500</option>
               <option value="1000">1000</option>
             </select>
           </label>
-          <button type="button" id="log-auto" class="chip current">自动刷新</button>
-          <button type="button" id="log-copy" class="btn ghost small">复制</button>
-          <button type="button" id="log-refresh" class="btn ghost small">刷新</button>
+          <button type="button" id="log-auto" class="chip current" data-i18n="自动刷新||Auto refresh">自动刷新</button>
+          <button type="button" id="log-copy" class="btn ghost small" data-i18n="复制||Copy">复制</button>
+          <button type="button" id="log-refresh" class="btn ghost small" data-i18n="刷新||Refresh">刷新</button>
         </div>
       </div>
-      <div id="log-body" class="log-pre"><p class="empty-note">还没有日志内容</p></div>
-      <p id="log-empty" class="log-empty hidden">没有匹配的日志行</p>
+      <div id="log-body" class="log-pre"><p class="empty-note" data-i18n="还没有日志内容||No logs yet">还没有日志内容</p></div>
+      <p id="log-empty" class="log-empty hidden" data-i18n="没有匹配的日志行||No matching log lines">没有匹配的日志行</p>
     </section>
   </div>
 
@@ -135,6 +140,7 @@
     detectState, getStatus, getAgents, setAgentActive,
     getTasks, getLogs, getConfig, setConfig, wakeService,
   } from './js/api.js';
+  import { applyI18n, getLang, initLang, onLangChange, setLang, t } from './js/i18n.js';
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -144,6 +150,43 @@
   const overlayText = $('#overlay-text');
   const wakeBtn = $('#wake-btn');
   const overlayTip = $('#overlay-tip');
+  const langBtn = $('#lang-btn');
+
+  // ---------- 语言切换 ----------
+  // 按钮显示的是「点一下会切到的语言」：中文界面显示 EN，英文界面显示 中
+  function updateLangBtn() {
+    langBtn.textContent = getLang() === 'en' ? '中' : 'EN';
+  }
+
+  function renderPageTitle() {
+    document.title = t('管理台 - IM-Agent Gateway 控制台', 'Admin - IM-Agent Gateway Console');
+  }
+
+  // 切换语言：即时重渲染本页，并写回 LANGUAGE 让 IM 侧回复跟随（离线时忽略失败）
+  async function switchLanguage(next) {
+    setLang(next);
+    updateLangBtn();
+    try {
+      await setConfig('LANGUAGE', next);
+    } catch (_) { /* 睡眠/离线状态下无法写回，仅本页生效 */ }
+  }
+
+  langBtn.addEventListener('click', () => switchLanguage(getLang() === 'en' ? 'zh' : 'en'));
+  updateLangBtn();
+  applyI18n();
+  renderPageTitle();
+  stateBadge.textContent = t('检测中', 'Checking');
+
+  // 语言变化：静态文案已由监听器统一重设，动态区块清指纹后重绘
+  onLangChange(() => {
+    applyI18n();
+    renderPageTitle();
+    setBadge(badgeState);
+    // 自动刷新按钮的文案随状态变化，静态文案重置后需按当前状态补一次
+    $('#log-auto').textContent = logAuto ? t('自动刷新', 'Auto refresh') : t('已暂停', 'Paused');
+    lastStatusSig = lastAgentsSig = lastTasksSig = lastLogsSig = lastConfigSig = '';
+    refreshAll().catch(() => {});
+  });
 
   // ---------- 页签切换 ----------
   // 当前激活的页签：overview=概览，logs=运行日志，config=配置
@@ -179,16 +222,22 @@
 
   // ---------- 三态控制 ----------
 
+  // 当前展示的状态（语言切换后按它重写徽章文案）
+  let badgeState = 'checking';
+
   function setBadge(state) {
+    badgeState = state;
     stateBadge.classList.remove('hidden', 'offline', 'sleep');
     if (state === 'online') {
-      stateBadge.textContent = '运行中';
+      stateBadge.textContent = t('运行中', 'Running');
     } else if (state === 'sleeping') {
-      stateBadge.textContent = '睡眠中';
+      stateBadge.textContent = t('睡眠中', 'Sleeping');
       stateBadge.classList.add('sleep');
     } else if (state === 'offline') {
-      stateBadge.textContent = '未运行';
+      stateBadge.textContent = t('未运行', 'Stopped');
       stateBadge.classList.add('offline');
+    } else if (state === 'checking') {
+      stateBadge.textContent = t('检测中', 'Checking');
     } else {
       stateBadge.textContent = state; // 提示文案等其他状态
     }
@@ -196,8 +245,9 @@
 
   function showSleeping() {
     setBadge('sleeping');
-    overlayTitle.textContent = '服务正在休息';
-    overlayText.textContent = '服务暂时没有在运行，你可以把它叫醒。';
+    overlayTitle.textContent = t('服务正在休息', 'Service is sleeping');
+    overlayText.textContent = t('服务暂时没有在运行，你可以把它叫醒。',
+      'The service is not running right now; you can wake it up.');
     wakeBtn.classList.remove('hidden');
     overlayTip.classList.add('hidden');
     overlay.classList.remove('hidden');
@@ -205,8 +255,10 @@
 
   function showOffline() {
     setBadge('offline');
-    overlayTitle.textContent = '服务没有启动';
-    overlayText.textContent = '既没有查到运行中的服务，也没有找到后台待命程序。请先在电脑上启动服务，再刷新本页。';
+    overlayTitle.textContent = t('服务没有启动', 'Service is not running');
+    overlayText.textContent = t(
+      '既没有查到运行中的服务，也没有找到后台待命程序。请先在电脑上启动服务，再刷新本页。',
+      'No running service or watchdog was found. Start the service on the computer, then reload this page.');
     wakeBtn.classList.add('hidden');
     overlay.classList.remove('hidden');
   }
@@ -215,7 +267,7 @@
     const state = await detectState();
     if (state === 'online') {
       overlay.classList.add('hidden');
-      setBadge('运行中');
+      setBadge('online');
       await refreshAll();
     } else if (state === 'sleeping') {
       showSleeping();
@@ -227,7 +279,7 @@
   // 唤醒：点击后打 /api/wake，随后轮询等服务上线（最多 60 秒）
   wakeBtn.addEventListener('click', async () => {
     wakeBtn.disabled = true;
-    wakeBtn.textContent = '正在叫醒…';
+    wakeBtn.textContent = t('正在叫醒…', 'Waking…');
     overlayTip.classList.remove('hidden');
     try {
       await wakeService();
@@ -238,14 +290,16 @@
         await getStatus();
         clearInterval(poll);
         wakeBtn.disabled = false;
-        wakeBtn.textContent = '点击唤醒';
+        wakeBtn.textContent = t('点击唤醒', 'Wake up');
         await handleState();
       } catch (_) {
         if (Date.now() > deadline) {
           clearInterval(poll);
           wakeBtn.disabled = false;
-          wakeBtn.textContent = '点击唤醒';
-          overlayText.textContent = '叫醒服务超过了 60 秒还没成功，请到电脑上检查服务进程。';
+          wakeBtn.textContent = t('点击唤醒', 'Wake up');
+          overlayText.textContent = t(
+            '叫醒服务超过了 60 秒还没成功，请到电脑上检查服务进程。',
+            'Waking the service timed out after 60 seconds; check the service process on the computer.');
         }
       }
     }, 1500);
@@ -264,8 +318,9 @@
     const remain = Math.max(0, idle.idle_min * 60 - idle.idle_sec);
     const min = Math.floor(remain / 60);
     const text = min >= 1
-      ? `大约 ${min} 分钟后自动休息`
-      : '即将自动休息（收到新消息会重新计时）';
+      ? t(`大约 ${min} 分钟后自动休息`, `Auto-rest in about ${min} min`)
+      : t('即将自动休息（收到新消息会重新计时）',
+          'Resting soon (a new message restarts the timer)');
     return `<p class="idle-note"><span class="idle-dot"></span>${text}</p>`;
   }
 
@@ -280,22 +335,22 @@
       ? `<div class="channel-list">${st.channels.map((c) => `
             <span class="chan ${c.connected ? 'on' : 'off'}">
               <span class="chan-name">${esc(c.name)}</span>
-              <span class="chan-state">${c.connected ? '已连接' : '未连接'}</span>
+              <span class="chan-state">${c.connected ? t('已连接', 'connected') : t('未连接', 'disconnected')}</span>
             </span>`).join('')}</div>`
-      : '<p class="empty-note">还没有接入消息通道</p>';
+      : `<p class="empty-note">${t('还没有接入消息通道', 'No message channel connected yet')}</p>`;
     $('#status-body').innerHTML = `
       <div class="metric-row">
         <div class="metric">
-          <span class="metric-label">运行状态</span>
-          <span class="metric-value ok"><span class="live-dot"></span>正常运行</span>
+          <span class="metric-label">${t('运行状态', 'Status')}</span>
+          <span class="metric-value ok"><span class="live-dot"></span>${t('正常运行', 'Running')}</span>
         </div>
         <div class="metric">
-          <span class="metric-label">消息通道</span>
-          <span class="metric-value">${online}<span class="metric-sub"> / ${st.channels.length} 已连接</span></span>
+          <span class="metric-label">${t('消息通道', 'Channels')}</span>
+          <span class="metric-value">${online}<span class="metric-sub"> / ${st.channels.length} ${t('已连接', 'connected')}</span></span>
         </div>
         <div class="metric">
-          <span class="metric-label">智能体</span>
-          <span class="metric-value">${st.agents.active}<span class="metric-sub"> / ${st.agents.total} 已开启</span></span>
+          <span class="metric-label">${t('智能体', 'Agents')}</span>
+          <span class="metric-value">${st.agents.active}<span class="metric-sub"> / ${st.agents.total} ${t('已开启', 'enabled')}</span></span>
         </div>
       </div>
       ${channelHtml}
@@ -307,36 +362,43 @@
     const sig = dataHash(agents);
     if (sig === lastAgentsSig) return;
     lastAgentsSig = sig;
-    $('#agent-count').textContent = `${agents.filter((a) => a.active).length} / ${agents.length} 已开启`;
+    $('#agent-count').textContent =
+      `${agents.filter((a) => a.active).length} / ${agents.length} ${t('已开启', 'enabled')}`;
     const host = $('#agent-list');
     host.innerHTML = '';
     if (!agents.length) {
-      host.innerHTML = '<p class="empty-note">还没有接入任何智能体</p>';
+      host.innerHTML = `<p class="empty-note">${t('还没有接入任何智能体', 'No agent connected yet')}</p>`;
       return;
     }
     // 用途与档位的通俗展示名（与后端 kind / complexity 配置对应）
-    const KIND_CN = { chat: '对话', coding: '编码', office: '办公' };
-    const LEVEL_CN = { simple: '简单', mid: '中等', complex: '复杂' };
+    const KIND_CN = {
+      chat: t('对话', 'Chat'), coding: t('编码', 'Coding'), office: t('办公', 'Office'),
+    };
+    const LEVEL_CN = {
+      simple: t('简单', 'Simple'), mid: t('中等', 'Medium'), complex: t('复杂', 'Complex'),
+    };
     agents.forEach((a) => {
       const row = document.createElement('div');
       row.className = 'agent-row';
       const disabled = a.active && !a.available;
-      const kind = KIND_CN[a.kind] || a.kind || '未设置';
+      const kind = KIND_CN[a.kind] || a.kind || t('未设置', 'Not set');
       const level = a.complexity ? (LEVEL_CN[a.complexity] || a.complexity) : '';
+      // 接入契约里的 label 自带用途括注（如「Trae（编码）」/「Trae (Coding)」），与用途标签重复，展示时去掉
+      const name = a.label.replace(/（[^）]*）\s*$|\([^)]*\)\s*$/, '').trim() || a.label;
       // 用途与档位改成名称后的标签，扫一眼就能对比，不再占一行说明
       row.innerHTML = `
-        <span class="agent-avatar" data-kind="${esc(a.kind || '')}" aria-hidden="true">${esc(kind.slice(0, 1))}</span>
+        <span class="agent-avatar" data-kind="${esc(a.kind || '')}" aria-hidden="true">${esc(name.slice(0, 1))}</span>
         <div class="info">
           <div class="name">
-            ${esc(a.label)}
+            ${esc(name)}
             <span class="tag">${esc(kind)}</span>
             ${level ? `<span class="tag muted">${esc(level)}</span>` : ''}
           </div>
           <div class="desc">${esc(a.routing_hint)}</div>
-          ${!a.available ? '<div class="state-note">暂不可用：缺少配置或未安装</div>' : ''}
+          ${!a.available ? `<div class="state-note">${t('暂不可用：缺少配置或未安装', 'Unavailable: missing configuration or not installed')}</div>` : ''}
         </div>
         <button class="toggle ${a.active ? 'on' : ''}" ${disabled ? 'disabled' : ''}
-                title="${a.active ? '点击关闭' : '点击开启'}">
+                title="${a.active ? t('点击关闭', 'Click to turn off') : t('点击开启', 'Click to turn on')}">
           <span class="knob"></span>
         </button>`;
       const toggle = row.querySelector('.toggle');
@@ -345,12 +407,12 @@
         try {
           const res = await setAgentActive(a.name, !a.active);
           if (!res.ok) {
-            alert(res.error || '操作没有成功，请稍后再试');
+            alert(res.error || t('操作没有成功，请稍后再试', 'The operation failed, please try again later'));
           }
           await renderAgents();
           await renderStatus();
         } catch (_) {
-          alert('连接服务失败，请稍后再试');
+          alert(t('连接服务失败，请稍后再试', 'Could not reach the service, please try again later'));
           toggle.disabled = false;
         }
       });
@@ -363,20 +425,21 @@
     const sig = dataHash(data);
     if (sig === lastTasksSig) return;
     lastTasksSig = sig;
-    $('#task-count').textContent = `${data.inflight} 个进行中`;
+    $('#task-count').textContent = t(`${data.inflight} 个进行中`, `${data.inflight} running`);
     const host = $('#task-list');
     if (!data.recent.length) {
-      host.innerHTML = '<p class="empty-note">最近还没有任务记录，这里只保留本次运行期间的任务</p>';
+      host.innerHTML = `<p class="empty-note">${t('最近还没有任务记录，这里只保留本次运行期间的任务',
+        'No tasks yet; only tasks from this run are kept here')}</p>`;
       return;
     }
     // 任务行：状态、任务名、来源与耗时等信息各占一列，左对齐扫读、右侧补细节
-    host.innerHTML = data.recent.map((t) => {
-      const meta = [t.im, t.model, `${t.elapsed_sec} 秒`, t.usage]
+    host.innerHTML = data.recent.map((task) => {
+      const meta = [task.im, task.model, t(`${task.elapsed_sec} 秒`, `${task.elapsed_sec} s`), task.usage]
         .filter(Boolean).map(esc).join(' · ');
       return `
         <div class="task-item">
-          <span class="task-state ${t.ok ? 'ok' : 'fail'}">${t.ok ? '完成' : '失败'}</span>
-          <span class="task-label" title="${esc(t.label)}">${esc(t.label)}</span>
+          <span class="task-state ${task.ok ? 'ok' : 'fail'}">${task.ok ? t('完成', 'done') : t('失败', 'failed')}</span>
+          <span class="task-label" title="${esc(task.label)}">${esc(task.label)}</span>
           <span class="task-meta">${meta}</span>
         </div>`;
     }).join('');
@@ -411,9 +474,10 @@
     $('#log-empty').classList.toggle('hidden', !noMatch);
     $('#log-meta').textContent = !logRaw.length
       ? ''
-      : (kw ? `显示 ${rows.length} / ${logRaw.length} 行` : `最近 ${logRaw.length} 行`);
+      : (kw ? t(`显示 ${rows.length} / ${logRaw.length} 行`, `Showing ${rows.length} / ${logRaw.length} lines`)
+            : t(`最近 ${logRaw.length} 行`, `Latest ${logRaw.length} lines`));
     if (!logRaw.length) {
-      body.innerHTML = '<p class="empty-note">还没有日志内容</p>';
+      body.innerHTML = `<p class="empty-note">${t('还没有日志内容', 'No logs yet')}</p>`;
       return;
     }
     if (noMatch) {
@@ -451,54 +515,71 @@
   // 界面分组：只决定配置在页面里的归类与顺序，接口仍按常用 / 高级返回
   const CFG_GROUPS = [
     {
-      id: 'agents', title: '智能体与选路',
+      id: 'agents', title: '智能体与选路', title_en: 'Agents & routing',
       desc: '智能体清单、用途分工、办公目录与自动选路方式',
-      keys: ['AGENTS', 'ENABLED_AGENTS', 'DEFAULT_AGENT', 'AUTO_ROUTE', 'JEV_ROUTE',
+      desc_en: 'Agent list, purpose split, office directory and automatic routing',
+      keys: ['LANGUAGE', 'AGENTS', 'ENABLED_AGENTS', 'DEFAULT_AGENT', 'AUTO_ROUTE', 'JEV_ROUTE',
         'AGENT_KINDS', 'AGENT_COMPLEXITY', 'COMPLEXITY_ROUTE', 'WORKBUDDY_CWD'],
     },
     {
-      id: 'usage', title: '使用与权限',
+      id: 'usage', title: '使用与权限', title_en: 'Usage & access',
       desc: '谁可以使用服务，以及启动时接入哪些消息通道',
+      desc_en: 'Who can use the service and which channels are connected at startup',
       keys: ['ALLOWED_USERS', 'CHANNELS'],
     },
     {
-      id: 'experience', title: '对话与运行',
+      id: 'experience', title: '对话与运行', title_en: 'Conversation & runtime',
       desc: '唤醒回复、首次使用提示、空闲自动休息与网页控制台开关',
+      desc_en: 'Wake reply, first-use guide, idle auto-rest and web console switch',
       keys: ['WAKE_REPLY', 'FIRST_USE_GUIDE', 'IDLE_EXIT', 'IDLE_EXIT_MIN', 'WEBUI_ENABLED'],
     },
     {
-      id: 'channels', title: '通道凭证', desc: '企业微信与飞书的接入凭证',
+      id: 'channels', title: '通道凭证', title_en: 'Channel credentials',
+      desc: '企业微信与飞书的接入凭证',
+      desc_en: 'Credentials for WeCom and Feishu',
       keys: ['BOT_ID', 'SECRET', 'WECOM_WS_URL', 'FEISHU_APP_ID', 'FEISHU_APP_SECRET'],
       advanced: true,
     },
     {
-      id: 'jev', title: '选路模型（Jev）', desc: '自动选路依赖的决策模型与调用参数',
+      id: 'jev', title: '选路模型（Jev）', title_en: 'Routing model (Jev)',
+      desc: '自动选路依赖的决策模型与调用参数',
+      desc_en: 'Decision model and parameters used for automatic routing',
       keys: ['MAKERS_MODELS_KEY', 'JEV_BASE_URL', 'JEV_MODEL', 'JEV_TIMEOUT_SEC', 'JEV_MIN_CONFIDENCE'],
       advanced: true,
     },
     {
-      id: 'chat-agent', title: '对话智能体', desc: 'SiliconFlow 接口、模型与输出参数',
+      id: 'chat-agent', title: '对话智能体', title_en: 'Chat agent',
+      desc: 'SiliconFlow 接口、模型与输出参数',
+      desc_en: 'SiliconFlow endpoint, model and output parameters',
       keys: ['API_KEY', 'SF_BASE_URL', 'SF_MODEL', 'SF_MAX_TOKENS', 'SF_TIMEOUT_SEC', 'SF_INCLUDE_REASONING'],
       advanced: true,
     },
     {
-      id: 'office-agent', title: '办公智能体', desc: 'WorkBuddy 的命令行路径、模型、权限与超时',
+      id: 'office-agent', title: '办公智能体', title_en: 'Office agent',
+      desc: 'WorkBuddy 的命令行路径、模型、权限与超时',
+      desc_en: 'WorkBuddy CLI path, model, permissions and timeout',
       keys: ['WORKBUDDY_BIN', 'WORKBUDDY_MODEL', 'WORKBUDDY_PERMISSION_MODE', 'WORKBUDDY_TIMEOUT_SEC'],
       advanced: true,
     },
     {
-      id: 'coding-agent', title: '编码智能体（Qoder）', desc: '工作目录、模型、权限与超时',
+      id: 'coding-agent', title: '编码智能体（Qoder）', title_en: 'Coding agent (Qoder)',
+      desc: '工作目录、模型、权限与超时',
+      desc_en: 'Working directory, model, permissions and timeout',
       keys: ['QODER_CWD', 'QODER_MODEL', 'QODER_PERMISSION_MODE', 'QODER_TIMEOUT_SEC',
         'QODER_MAX_OUTPUT_TOKENS', 'QODER_BIN', 'QODERCN_PERSONAL_ACCESS_TOKEN'],
       advanced: true,
     },
     {
-      id: 'stream', title: '消息流与日志', desc: '流式推送节奏、命名工作区与日志级别',
+      id: 'stream', title: '消息流与日志', title_en: 'Streaming & logs',
+      desc: '流式推送节奏、命名工作区与日志级别',
+      desc_en: 'Streaming cadence, named workspaces and log level',
       keys: ['WORKSPACES', 'STREAM_INTERVAL_SEC', 'STREAM_CHUNK_SIZE', 'HEARTBEAT_INTERVAL_SEC', 'LOG_LEVEL'],
       advanced: true,
     },
     {
-      id: 'watchdog', title: '后台待命与控制台', desc: '消息唤醒、休息时托管与服务监听参数',
+      id: 'watchdog', title: '后台待命与控制台', title_en: 'Watchdog & console',
+      desc: '消息唤醒、休息时托管与服务监听参数',
+      desc_en: 'Message wake-up, sleeping-state hosting and listen parameters',
       keys: ['WATCH_ENABLED', 'SERVICE_CMD', 'WAKE_HANDOFF_FILE', 'WATCH_HTTP_ENABLED',
         'WEBUI_HOST', 'WEBUI_PORT', 'WEBUI_USER_ID', 'WEBUI_STATIC'],
       advanced: true,
@@ -542,7 +623,7 @@
   // 值的展示：空值说「未设置」，敏感项打码，短逗号清单拆成标签，其余单行省略
   function cfgValueHtml(it) {
     const shown = cfgShown(it);
-    if (!shown) return '<span class="cfg-empty">未设置</span>';
+    if (!shown) return `<span class="cfg-empty">${t('未设置', 'Not set')}</span>`;
     if (it.sensitive) return '<span class="cfg-mask">••••••••</span>';
     const parts = shown.split(',').map((s) => s.trim()).filter(Boolean);
     if (parts.length > 1 && parts.length <= 6 && shown.length <= 80) {
@@ -559,7 +640,8 @@
     row.dataset.key = it.key;
     const shown = cfgShown(it);
     // 只有本次真的保存了不同的值才标「待重启」；未改动时行内不出现任何重启提示
-    const pendTag = cfgPending.has(it.key) ? '<span class="pend-badge">待重启</span>' : '';
+    const pendTag = cfgPending.has(it.key)
+      ? `<span class="pend-badge">${t('待重启', 'Restart to apply')}</span>` : '';
     const head = `
       <div class="cfg-main">
         <div class="cfg-label">
@@ -572,9 +654,9 @@
       // 开关项：文字状态 + 滑块，点击即保存（值写 1 / 0）
       row.innerHTML = `${head}
         <div class="cfg-control">
-          <span class="cfg-state">${shown === '1' ? '已开启' : '已关闭'}</span>
+          <span class="cfg-state">${shown === '1' ? t('已开启', 'On') : t('已关闭', 'Off')}</span>
           <button type="button" class="toggle ${shown === '1' ? 'on' : ''}"
-                  title="${shown === '1' ? '点击关闭' : '点击开启'}"><span class="knob"></span></button>
+                  title="${shown === '1' ? t('点击关闭', 'Click to turn off') : t('点击开启', 'Click to turn on')}"><span class="knob"></span></button>
         </div>`;
       const btn = row.querySelector('.toggle');
       btn.addEventListener('click', async () => {
@@ -585,18 +667,18 @@
           if (res.ok) {
             // 热生效项直接刷新；冷生效项仅在值确实变化时记入待重启缓存
             if (res.hot) {
-              toast('已生效');
+              toast(t('已生效', 'Applied'));
             } else if (next !== it.value) {
               cfgPending.set(it.key, next);
-              toast('已保存，重启服务后生效');
+              toast(t('已保存，重启服务后生效', 'Saved; takes effect after a restart'));
             } else {
-              toast('已保存');
+              toast(t('已保存', 'Saved'));
             }
           } else {
-            alert(res.error || '保存没有成功，请稍后再试');
+            alert(res.error || t('保存没有成功，请稍后再试', 'Saving failed, please try again later'));
           }
         } catch (_) {
-          alert('连接服务失败，请稍后再试');
+          alert(t('连接服务失败，请稍后再试', 'Could not reach the service, please try again later'));
         }
         btn.disabled = false;
         renderConfig(true).catch(() => {});
@@ -608,7 +690,7 @@
     row.innerHTML = `${head}
       <div class="cfg-control">
         <div class="cfg-value">${cfgValueHtml(it)}</div>
-        ${editable ? '<button type="button" class="btn ghost small cfg-edit-btn">修改</button>' : ''}
+        ${editable ? `<button type="button" class="btn ghost small cfg-edit-btn">${t('修改', 'Edit')}</button>` : ''}
       </div>`;
     if (editable) {
       row.querySelector('.cfg-edit-btn').addEventListener('click', () => cfgStartEdit(row, it));
@@ -629,13 +711,14 @@
     box.innerHTML = `
       <div class="cfg-editor-field">
         <input type="text" value="${it.sensitive ? '' : esc(cfgShown(it))}"
-               placeholder="${it.sensitive ? '留空保持不变，填写新值则更换' : '填写新的值'}"
+               placeholder="${it.sensitive ? t('留空保持不变，填写新值则更换', 'Leave blank to keep; enter a new value to replace')
+                                           : t('填写新的值', 'Enter a new value')}"
                autocomplete="off" spellcheck="false">
         <p class="cfg-error hidden"></p>
       </div>
       <div class="cfg-editor-actions">
-        <button type="button" class="btn small">保存</button>
-        <button type="button" class="btn ghost small">取消</button>
+        <button type="button" class="btn small">${t('保存', 'Save')}</button>
+        <button type="button" class="btn ghost small">${t('取消', 'Cancel')}</button>
       </div>`;
     row.appendChild(box);
 
@@ -662,21 +745,21 @@
       try {
         const res = await setConfig(it.key, value);
         if (!res.ok) {
-          showErr(res.error || '保存没有成功，请稍后再试');
+          showErr(res.error || t('保存没有成功，请稍后再试', 'Saving failed, please try again later'));
           saveBtn.disabled = false;
           input.focus();
           return;
         }
         if (res.hot) {
-          toast('已生效');
+          toast(t('已生效', 'Applied'));
         } else if (value !== it.value) {
           cfgPending.set(it.key, value);
-          toast('已保存，重启服务后生效');
+          toast(t('已保存，重启服务后生效', 'Saved; takes effect after a restart'));
         } else {
-          toast('已保存');
+          toast(t('已保存', 'Saved'));
         }
       } catch (_) {
-        showErr('连接服务失败，请稍后再试');
+        showErr(t('连接服务失败，请稍后再试', 'Could not reach the service, please try again later'));
         saveBtn.disabled = false;
         input.focus();
         return;
@@ -701,11 +784,11 @@
     head.className = 'cfg-group-head';
     head.innerHTML = `
       <h3>
-        <span>${esc(group.title)}</span>
-        ${group.advanced ? '<span class="cfg-tag adv">高级</span>' : ''}
-        <span class="cfg-group-count">${items.length} 项</span>
+        <span>${esc(t(group.title, group.title_en))}</span>
+        ${group.advanced ? `<span class="cfg-tag adv">${t('高级', 'Advanced')}</span>` : ''}
+        <span class="cfg-group-count">${t(`${items.length} 项`, `${items.length} items`)}</span>
       </h3>
-      <p class="cfg-group-desc">${esc(group.desc)}</p>`;
+      <p class="cfg-group-desc">${esc(t(group.desc, group.desc_en))}</p>`;
     sec.appendChild(head);
     items.forEach((it) => sec.appendChild(cfgRow(it, true)));
     return sec;
@@ -718,12 +801,12 @@
               class="${target === cfgActiveNav ? 'current' : ''}">
         <span>${esc(label)}</span><span class="count">${count}</span>
       </button>`;
-    const parts = [btn('top', '全部配置', counts.total)];
+    const parts = [btn('top', t('全部配置', 'All settings'), counts.total)];
     CFG_GROUPS.filter((g) => !g.advanced)
-      .forEach((g) => parts.push(btn(g.id, g.title, counts.byGroup[g.id] || 0)));
-    parts.push('<p class="rail-label">高级设置</p>');
+      .forEach((g) => parts.push(btn(g.id, t(g.title, g.title_en), counts.byGroup[g.id] || 0)));
+    parts.push(`<p class="rail-label">${t('高级设置', 'Advanced')}</p>`);
     CFG_GROUPS.filter((g) => g.advanced)
-      .forEach((g) => parts.push(btn(g.id, g.title, counts.byGroup[g.id] || 0)));
+      .forEach((g) => parts.push(btn(g.id, t(g.title, g.title_en), counts.byGroup[g.id] || 0)));
     $('#config-nav').innerHTML = parts.join('');
   }
 
@@ -773,7 +856,7 @@
       adv.id = 'config-advanced-box';
       adv.open = cfgAdvancedOpen || !!cfgQuery || cfgFilter !== 'all';
       const summary = document.createElement('summary');
-      summary.innerHTML = `高级设置 <span class="cfg-group-count">${advMatched} / ${cfg.advanced.length} 项</span>`;
+      summary.innerHTML = `${t('高级设置', 'Advanced')} <span class="cfg-group-count">${advMatched} / ${cfg.advanced.length} ${t('项', 'items')}</span>`;
       adv.appendChild(summary);
       CFG_GROUPS.filter((g) => g.advanced).forEach((g) => {
         const items = g.keys.map((k) => all.get(k)).filter(Boolean).filter(cfgMatches);
@@ -795,7 +878,7 @@
       unk.className = 'cfg-advanced cfg-unknown-box';
       unk.open = !!cfgQuery;
       const summary = document.createElement('summary');
-      summary.innerHTML = `未登记配置（只读） <span class="cfg-group-count">${unkItems.length} 项</span>`;
+      summary.innerHTML = `${t('未登记配置（只读）', 'Unregistered settings (read-only)')} <span class="cfg-group-count">${t(`${unkItems.length} 项`, `${unkItems.length} items`)}</span>`;
       unk.appendChild(summary);
       unkItems.forEach((it) => unk.appendChild(cfgRow(it, false)));
       host.appendChild(unk);
@@ -804,12 +887,15 @@
     // 工具栏计数、左侧汇总与空状态
     const filtering = !!cfgQuery || cfgFilter !== 'all';
     // 没有待重启项时只说总数，不出现「待重启 0 项」这类多余提示
-    const pendNote = cfgPending.size ? ` · 待重启 ${cfgPending.size} 项` : '';
+    const pendNote = cfgPending.size
+      ? t(` · 待重启 ${cfgPending.size} 项`, ` · ${cfgPending.size} restart pending`)
+      : '';
     $('#config-count').textContent = filtering
-      ? `匹配 ${visible} 项`
-      : `共 ${counts.total} 项${pendNote}`;
+      ? t(`匹配 ${visible} 项`, `${visible} matched`)
+      : t(`共 ${counts.total} 项${pendNote}`, `${counts.total} items${pendNote}`);
     $('#config-rail-summary').textContent =
-      `常用 ${cfg.common.length} 项 · 高级 ${cfg.advanced.length} 项`;
+      t(`常用 ${cfg.common.length} 项 · 高级 ${cfg.advanced.length} 项`,
+        `Common ${cfg.common.length} · Advanced ${cfg.advanced.length}`);
     $('#config-empty').classList.toggle('hidden', visible > 0);
     renderCfgNav(counts);
   }
@@ -898,7 +984,7 @@
     logAuto = !logAuto;
     const btn = $('#log-auto');
     btn.classList.toggle('current', logAuto);
-    btn.textContent = logAuto ? '自动刷新' : '已暂停';
+    btn.textContent = logAuto ? t('自动刷新', 'Auto refresh') : t('已暂停', 'Paused');
     if (logAuto) {
       lastLogsSig = '';
       renderLogs(true).catch(() => {});
@@ -911,12 +997,12 @@
     const rows = kw
       ? logRaw.filter((line) => line.toLowerCase().includes(kw))
       : logRaw;
-    if (!rows.length) { toast('没有可复制的日志'); return; }
+    if (!rows.length) { toast(t('没有可复制的日志', 'No logs to copy')); return; }
     try {
       await navigator.clipboard.writeText(rows.join('\n'));
-      toast(`已复制 ${rows.length} 行日志`);
+      toast(t(`已复制 ${rows.length} 行日志`, `Copied ${rows.length} log lines`));
     } catch (_) {
-      toast('复制失败，请手动选中日志内容');
+      toast(t('复制失败，请手动选中日志内容', 'Copy failed; select the log text manually'));
     }
   });
 
@@ -924,6 +1010,19 @@
   $('#log-refresh').addEventListener('click', () => renderLogs(true).catch(() => {}));
 
   // ---------- 启动 ----------
+
+  // 本机还没选过语言时跟随服务端 LANGUAGE：切换结果已写回 .env，重启后沿用上次选择
+  try {
+    const st = await getStatus();
+    const before = getLang();
+    if (initLang(st.language) !== before) {
+      updateLangBtn();
+      applyI18n();
+      renderPageTitle();
+      setBadge(badgeState);
+      lastStatusSig = lastAgentsSig = lastTasksSig = lastLogsSig = lastConfigSig = '';
+    }
+  } catch (_) { /* 服务未启动：保持默认中文，交给三态探测提示 */ }
 
   await handleState();
   // 在线时每 5 秒轮询一次整体状态（接口不通则重新走三态探测）

@@ -11,6 +11,7 @@ from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.i18n import set_language
 from im_agent_gateway.plugins import load_channel
 from im_agent_gateway.router.dispatcher import MessageRouter
 
@@ -82,6 +83,7 @@ def check(cond: bool, label: str) -> None:
 
 async def main() -> None:
     cfg = load_config()
+    set_language("zh")  # 断言中文文案：固定语言，避免受本机 .env 的 LANGUAGE 影响
     cfg.allowed_users = set()
     cfg.jev_route = False
 
@@ -132,11 +134,11 @@ async def main() -> None:
     echo.on_message = router.handle_msg
 
     await echo.on_message(echo.make_msg("你好"))
-    check(echo.frames and echo.frames[0][1].startswith("Mini（契约示例） 处理中"),
+    check(echo.frames and echo.frames[0][1].startswith("· Mini（契约示例）处理中"),
           "任务开始提示经通道 send_stream 下发")
     check(any("echo:你好" in c for _, c in echo.frames), "过程输出经 on_output 流式回传到通道")
-    check(echo.frames[-1][0] and "—— Mini（契约示例）" in echo.frames[-1][1],
-          "任务结束帧 finish=True 且附 Agent/模型摘要")
+    check(echo.frames[-1][0] and "· 模型 " in echo.frames[-1][1],
+          "任务结束帧 finish=True 且附模型摘要")
 
     await echo.on_message(echo.make_msg("/help"))
     check(any("IM-Agent Gateway 指令帮助" in t for t in echo.texts), "指令回复经通道 send_text 下发")

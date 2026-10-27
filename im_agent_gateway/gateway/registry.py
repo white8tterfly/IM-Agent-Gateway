@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from .base import IMChannel
+from ..i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class Gateway:
         if channel.name in self._channels:
             raise ValueError(f"通道 {channel.name} 已注册，不能重复注册")
         self._channels[channel.name] = channel
-        logger.info("已注册 IM 通道：%s", channel.name)
+        logger.info(t("已注册 IM 通道：%s", "Registered IM channel: %s"), channel.name)
 
     def get(self, name: str) -> IMChannel | None:
         return self._channels.get(name)
@@ -62,4 +63,4 @@ class Gateway:
             try:
                 await ch.close()
             except Exception:
-                logger.exception("关闭通道 %s 时发生异常", name)
+                logger.exception(t("关闭通道 %s 时发生异常", "Error while closing channel %s"), name)

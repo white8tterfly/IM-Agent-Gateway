@@ -15,6 +15,7 @@ from ..agents.base import BaseAgent
 from ..agents.registry import AgentRegistry
 from ..config import Config
 from ..gateway.base import IMChannel, InboundEvent, InboundMessage
+from ..i18n import t
 from ..manage.commands import AgentOps
 from .jev_router import JevRouter
 from .keyword_router import KeywordRouter
@@ -59,9 +60,10 @@ class StreamSender:
         content = self.buf[-STREAM_CAP:]
         if finish:
             if self.replay:
-                await self.channel.send_push(self.msg, content or "（无内容）")
+                await self.channel.send_push(self.msg, content or t("（无内容）", "(empty reply)"))
             else:
-                await self.channel.send_stream(self.msg, self.stream_id, content or "（无内容）", finish=True)
+                await self.channel.send_stream(self.msg, self.stream_id,
+                                               content or t("（无内容）", "(empty reply)"), finish=True)
             self.closed = True
             return
         if self.replay:
@@ -108,36 +110,42 @@ class MessageRouter:
         """动态生成帮助文本：框架命令 + 各 Agent 指令分组。"""
         names = "|".join(self.registry.names) or "…"
         lines = [
-            "IM-Agent Gateway 指令帮助",
-            "直接发送消息：由 Jev 按用途与问题复杂度两级路由到最合适的 Agent（不可用时按关键词降级）",
+            t("IM-Agent Gateway 指令帮助", "IM-Agent Gateway command help"),
+            t("直接发送消息：由 Jev 按用途与问题复杂度两级路由到最合适的 Agent（不可用时按关键词降级）",
+              "Just send a message: Jev routes it by purpose and complexity to the best Agent "
+              "(keyword fallback when unavailable)"),
             "",
-            f"/agent [{names}|auto]  切换路由 Agent（固定/自动）",
-            "/agent on|off <名称>   开启/关闭 Agent 服务",
-            "/status        查看当前状态",
-            "/webui         获取 Web 控制台地址",
-            "/help          显示本帮助",
+            t(f"/agent [{names}|auto]  切换路由 Agent（固定/自动）",
+              f"/agent [{names}|auto]  switch routing Agent (fixed/auto)"),
+            t("/agent on|off <名称>   开启/关闭 Agent 服务",
+              "/agent on|off <name>   enable/disable an Agent"),
+            t("/status        查看当前状态", "/status        show current status"),
+            t("/webui         获取 Web 控制台地址", "/webui         get the Web console address"),
+            t("/help          显示本帮助", "/help          show this help"),
         ]
         for agent in self.registry.agents:
             cmds = agent.commands()
             if not cmds:
                 continue
             lines.append("")
-            lines.append(f"【{agent.label}】")
+            lines.append(f"【{agent.display_label}】")
             lines.extend(f"{c.usage:<20}{c.brief}" for c in cmds)
         return "\n".join(lines)
 
     def _first_use_text(self) -> str:
         """首次使用的简短引导：只列常用指令，完整清单交给 /help。"""
         return "\n".join([
-            "初次使用提示（只提示这一次）",
-            "直接发消息即可，我会自动挑选合适的 Agent 执行任务。",
+            t("初次使用提示（只提示这一次）", "Getting started (shown only once)"),
+            t("直接发消息即可，我会自动挑选合适的 Agent 执行任务。",
+              "Just send a message and I will pick the right Agent for the task."),
             "",
-            "/help              查看全部指令",
-            "/status            查看服务状态",
-            "/agent <名称>       固定 Agent（/agent auto 恢复自动路由）",
-            "/reset             清空当前会话记忆",
-            "/stop              终止正在执行的任务",
-            "/webui             获取 Web 控制台地址",
+            t("/help              查看全部指令", "/help              list all commands"),
+            t("/status            查看服务状态", "/status            show service status"),
+            t("/agent <名称>       固定 Agent（/agent auto 恢复自动路由）",
+              "/agent <name>       pin an Agent (/agent auto resumes auto routing)"),
+            t("/reset             清空当前会话记忆", "/reset             clear this session's memory"),
+            t("/stop              终止正在执行的任务", "/stop              stop the running task"),
+            t("/webui             获取 Web 控制台地址", "/webui             get the Web console address"),
         ])
 
     def _load_guided(self) -> set[str]:
@@ -158,7 +166,7 @@ class MessageRouter:
                 json.dump({"version": 1, "users": sorted(self._guided)}, fh, ensure_ascii=False)
             os.replace(tmp, path)
         except OSError as exc:
-            logger.warning("首次引导记录写入失败：%s", exc)
+            logger.warning(t("首次引导记录写入失败：%s", "Failed to write the first-use guide record: %s"), exc)
 
     async def _guide_first_use(self, msg: InboundMessage) -> None:
         """用户第一次发消息时先回一条使用说明；同一用户只发一次，重启后仍记得。"""
@@ -177,21 +185,28 @@ class MessageRouter:
     def _webui_text(self) -> str:
         """返回 Web 控制台地址：电脑端与手机端分开列出。"""
         if not self.cfg.webui_enabled and "webui" not in self.cfg.channels:
-            return ("Web 控制台未开启。\n"
-                    "管理员可在服务所在电脑执行：python manage.py config set WEBUI_ENABLED 1\n"
-                    "然后重启服务，再发送 /webui。")
+            return t(
+                "Web 控制台未开启。\n"
+                "管理员可在服务所在电脑执行：python manage.py config set WEBUI_ENABLED 1\n"
+                "然后重启服务，再发送 /webui。",
+                "Web console is not enabled.\n"
+                "An admin can run on the host machine: python manage.py config set WEBUI_ENABLED 1\n"
+                "then restart the service and send /webui again.",
+            )
 
         pc, lan = self.cfg.webui_urls
-        lines = ["Web 控制台",
-                 f"电脑端 管理台：{pc}",
-                 f"电脑端 聊天台：{pc}/chat.html"]
+        lines = [t("Web 控制台", "Web console"),
+                 t(f"电脑端 管理台：{pc}", f"Desktop admin: {pc}"),
+                 t(f"电脑端 聊天台：{pc}/chat.html", f"Desktop chat:  {pc}/chat.html")]
         if lan:
-            lines.append(f"手机端 管理台：{lan}")
-            lines.append(f"手机端 聊天台：{lan}/chat.html")
+            lines.append(t(f"手机端 管理台：{lan}", f"Mobile admin:  {lan}"))
+            lines.append(t(f"手机端 聊天台：{lan}/chat.html", f"Mobile chat:   {lan}/chat.html"))
             if self.cfg.webui_local_only:
-                lines.append("（手机端访问需把 WEBUI_HOST 改为 0.0.0.0 并重启服务）")
+                lines.append(t("（手机端访问需把 WEBUI_HOST 改为 0.0.0.0 并重启服务）",
+                               "(set WEBUI_HOST to 0.0.0.0 and restart the service for mobile access)"))
         else:
-            lines.append("手机端 未获取到局域网 IP，请用本机局域网 IP 访问")
+            lines.append(t("手机端 未获取到局域网 IP，请用本机局域网 IP 访问",
+                           "Mobile: no LAN IP detected; use this machine's LAN IP"))
         return "\n".join(lines)
 
     # ---------- 通道回调 ----------
@@ -199,15 +214,22 @@ class MessageRouter:
     async def handle_msg(self, msg: InboundMessage) -> None:
         self._last_activity = time.monotonic()
         if not self._allowed(msg.user_id):
-            logger.info("拒绝非白名单用户 %s", msg.user_id)
+            logger.info(t("拒绝非白名单用户 %s", "Rejected user not in the allowlist: %s"), msg.user_id)
             return
 
         if msg.msg_type != "text":
-            await msg.channel.send_text(msg, "暂不支持该类型消息，请发送文本（图片/文件可在群内发文本描述）")
+            await msg.channel.send_text(msg, t(
+                "暂不支持该类型消息，请发送文本（图片/文件可在群内发文本描述）",
+                "This message type is not supported; please send text "
+                "(describe images/files in text instead)",
+            ))
             return
 
         if msg.chat_type == "group" and not msg.content:
-            await msg.channel.send_text(msg, "请 @我 并附上任务描述，发送 /help 查看用法")
+            await msg.channel.send_text(msg, t(
+                "请 @我 并附上任务描述，发送 /help 查看用法",
+                "Mention me with a task description; send /help for usage",
+            ))
             return
 
         chat_key = f"g:{msg.chat_id}" if msg.chat_type == "group" and msg.chat_id else f"s:{msg.user_id}"
@@ -218,9 +240,13 @@ class MessageRouter:
         else:
             agent = await self._resolve_agent(chat_key, msg.content)
             if agent is None:
-                await msg.channel.send_text(msg, "当前没有可用的 Agent 服务，请先 /agent on <名称> 开启")
+                await msg.channel.send_text(msg, t(
+                    "当前没有可用的 Agent 服务，请先 /agent on <名称> 开启",
+                    "No Agent is available; enable one with /agent on <name>",
+                ))
                 return
-            logger.info("路由消息 → %s（chat=%s，IM=%s）", agent.name, chat_key, msg.im)
+            logger.info(t("路由消息 → %s（chat=%s，IM=%s）", "Routing message → %s (chat=%s, IM=%s)"),
+                        agent.name, chat_key, msg.im)
             await self._start_task(chat_key, msg.content, msg, agent)
 
     async def handle_event(self, evt: InboundEvent) -> None:
@@ -253,7 +279,10 @@ class MessageRouter:
             # 非框架命令：转发给当前路由的 Agent 处理
             agent = await self._resolve_agent(chat_key, "")
             if agent is None:
-                await msg.channel.send_text(msg, "当前没有可用的 Agent 服务，请先 /agent on <名称> 开启")
+                await msg.channel.send_text(msg, t(
+                    "当前没有可用的 Agent 服务，请先 /agent on <名称> 开启",
+                    "No Agent is available; enable one with /agent on <name>",
+                ))
                 return
 
             async def send(text: str) -> None:
@@ -261,7 +290,10 @@ class MessageRouter:
 
             handled = await agent.handle_command(chat_key, cmd, arg, send)
             if not handled:
-                await msg.channel.send_text(msg, f"未知命令 {cmd}，发送 /help 查看用法")
+                await msg.channel.send_text(msg, t(
+                    f"未知命令 {cmd}，发送 /help 查看用法",
+                    f"Unknown command {cmd}; send /help for usage",
+                ))
 
     async def _handle_agent(self, chat_key: str, arg: str, msg: InboundMessage) -> None:
         """/agent 命令：查看状态、切换路由、开关 Agent。"""
@@ -274,34 +306,45 @@ class MessageRouter:
         parts = arg.split(maxsplit=1)
         if parts and parts[0].lower() in ("on", "off") and len(parts) == 2:
             err = AgentOps.set_active(self.cfg, self.registry, parts[1].strip(), parts[0].lower() == "on")
-            await msg.channel.send_text(msg, err or "已更新 Agent 开关状态")
+            await msg.channel.send_text(msg, err or t("已更新 Agent 开关状态", "Agent state updated"))
             return
 
         if not arg:
             current = self.chat_agents.get(chat_key) or ("auto" if self.cfg.auto_route else self.cfg.default_agent)
-            lines = ["Agent 状态", f"• 路由偏好：{self._agent_label(current)}"]
+            lines = [t("Agent 状态", "Agent status"),
+                     t(f"• 路由偏好：{self._agent_label(current)}",
+                       f"• Routing preference: {self._agent_label(current)}")]
             for agent in self.registry.agents:
                 on = self.registry.is_active(agent.name)
-                note = "" if on or agent.available else "（不可用：如未配置 API_KEY）"
-                lines.append(f"• {agent.name}: {agent.label}{'已开启' if on else '已关闭'}{note}")
-            lines.append("\n/agent <名称>|auto  固定路由偏好")
-            lines.append("/agent on|off <名称>  开启/关闭 Agent")
+                note = "" if on or agent.available else t("（不可用：如未配置 API_KEY）",
+                                                          " (unavailable: e.g. API_KEY not set)")
+                state = t("已开启", "on") if on else t("已关闭", "off")
+                lines.append(f"• {agent.name}: {agent.display_label} {state}{note}")
+            lines.append(t("\n/agent <名称>|auto  固定路由偏好",
+                           "\n/agent <name>|auto  pin routing preference"))
+            lines.append(t("/agent on|off <名称>  开启/关闭 Agent",
+                           "/agent on|off <name>  enable/disable an Agent"))
             await msg.channel.send_text(msg, "\n".join(lines))
             return
 
         key = aliases.get(arg.lower(), "")
         if not key:
             names = "|".join(self.registry.names) or "…"
-            await msg.channel.send_text(msg, f"用法：/agent [{names}|auto]，或 /agent on|off <名称>")
+            await msg.channel.send_text(msg, t(
+                f"用法：/agent [{names}|auto]，或 /agent on|off <名称>",
+                f"Usage: /agent [{names}|auto], or /agent on|off <name>",
+            ))
             return
         if key == "auto":
             self.chat_agents.pop(chat_key, None)
         elif self.registry.get(key) is None:
-            await msg.channel.send_text(msg, f"未注册的 Agent：{key}")
+            await msg.channel.send_text(msg, t(f"未注册的 Agent：{key}",
+                                               f"Unregistered Agent: {key}"))
             return
         else:
             self.chat_agents[chat_key] = key
-        await msg.channel.send_text(msg, f"本会话 Agent 已切换为 {self._agent_label(key)}")
+        await msg.channel.send_text(msg, t(f"本会话 Agent 已切换为 {self._agent_label(key)}",
+                                           f"This session now uses {self._agent_label(key)}"))
 
     # ---------- 任务执行 ----------
 
@@ -322,7 +365,8 @@ class MessageRouter:
         if agent.busy(chat_key):
             # 有任务在执行：先给反馈，再排队
             queued = StreamSender(msg.channel, msg, self.cfg.stream_interval_sec, replay=msg.replay)
-            await queued.feed("上一条任务正在执行，本条消息已排队")
+            await queued.feed(t("上一条任务正在执行，本条消息已排队",
+                                "Previous task is still running; this message has been queued"))
             await queued.flush(finish=True)
 
         sender = StreamSender(msg.channel, msg, self.cfg.stream_interval_sec, replay=msg.replay)
@@ -338,20 +382,20 @@ class MessageRouter:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            logger.exception("任务调度异常（%s）", agent.name)
-            await sender.feed(f"\n服务异常：{exc}")
+            logger.exception(t("任务调度异常（%s）", "Task scheduling error (%s)"), agent.name)
+            await sender.feed(t(f"\n服务异常：{exc}", f"\nService error: {exc}"))
             await sender.flush(finish=True)
             self._emit_task_event(agent, model, msg, chat_key, started_at, ok=False, usage=None)
             return
 
         if not result.ok:
-            await sender.feed(f"\n{result.error or '任务执行失败'}")
-        # 结尾附上本次任务信息：Agent / 模型 / 用量
-        model_name = model or agent.default_model or "默认"
+            await sender.feed(f"\n{result.error or t('任务执行失败', 'Task failed')}")
+        # 结尾附上本次任务信息：模型与用量各占一行，与开始提示同款圆点前缀
+        model_name = model or agent.default_model or t("默认", "default")
         usage = getattr(result, "usage", None)
-        summary = f"\n—— {agent.label} · 模型 {model_name}"
+        summary = t(f"\n\n· 模型 {model_name}", f"\n\n· model {model_name}")
         if usage:
-            summary += f" · {usage}"
+            summary += f"\n· {usage}"
         await sender.feed(summary)
         await sender.flush(finish=True)
         self._emit_task_event(agent, model, msg, chat_key, started_at, ok=result.ok, usage=usage)
@@ -366,7 +410,7 @@ class MessageRouter:
         try:
             self.on_task_event({
                 "agent": agent.name,
-                "label": agent.label,
+                "label": agent.display_label,
                 "model": model or agent.default_model,
                 "im": msg.im,
                 "chat_key": chat_key,
@@ -376,7 +420,7 @@ class MessageRouter:
                 "elapsed_sec": round(time.time() - started_at, 3),
             })
         except Exception:
-            logger.exception("任务事件上报失败")
+            logger.exception(t("任务事件上报失败", "Failed to report task event"))
 
     # ---------- 工具 ----------
 
@@ -454,7 +498,7 @@ class MessageRouter:
 
     def _agent_label(self, key: str) -> str:
         agent = self.registry.get(key)
-        return agent.label if agent else ("自动路由" if key == "auto" else key)
+        return agent.display_label if agent else (t("自动路由", "auto") if key == "auto" else key)
 
     def _allowed(self, userid: str) -> bool:
         return not self.cfg.allowed_users or userid in self.cfg.allowed_users
@@ -479,17 +523,23 @@ class MessageRouter:
     async def _status_text(self, chat_key: str) -> str:
         agent = await self._resolve_agent(chat_key, "")
         cwd = agent.cwd_for(chat_key) if agent else str(self.cfg.qoder_cwd_resolved)
-        busy = "执行中" if any(a.busy(chat_key) for a in self.registry.active_agents) else "空闲"
+        busy = (t("执行中", "busy") if any(a.busy(chat_key) for a in self.registry.active_agents)
+                else t("空闲", "idle"))
         lines = [
-            "IM-Agent Gateway 服务状态",
-            f"• 路由 Agent：{agent.label if agent else '无（请 /agent on 开启）'}",
-            f"• 工作目录：{cwd}",
+            t("IM-Agent Gateway 服务状态", "IM-Agent Gateway status"),
+            t(f"• 路由 Agent：{agent.display_label if agent else '无（请 /agent on 开启）'}",
+              f"• Routing Agent: {agent.display_label if agent else 'none (use /agent on to enable)'}"),
+            t(f"• 工作目录：{cwd}", f"• Working dir: {cwd}"),
         ]
         for a in self.registry.agents:
             on = self.registry.is_active(a.name)
-            model = a.model_for(chat_key) or a.default_model or "默认"
-            note = "" if on or a.available else "（前置条件未满足）"
-            lines.append(f"• {a.label}：{'已开启' if on else '已关闭'}{note}，模型 {model}")
-        lines.append(f"• 会话状态：{busy}")
-        lines.append(f"• 权限模式：{self.cfg.qoder_permission_mode}")
+            model = a.model_for(chat_key) or a.default_model or t("默认", "default")
+            note = "" if on or a.available else t("（前置条件未满足）",
+                                                  " (prerequisites not met)")
+            state = t("已开启", "on") if on else t("已关闭", "off")
+            lines.append(t(f"• {a.display_label}：{state}{note}，模型 {model}",
+                           f"• {a.display_label}: {state}{note}, model {model}"))
+        lines.append(t(f"• 会话状态：{busy}", f"• Session: {busy}"))
+        lines.append(t(f"• 权限模式：{self.cfg.qoder_permission_mode}",
+                       f"• Permission mode: {self.cfg.qoder_permission_mode}"))
         return "\n".join(lines)

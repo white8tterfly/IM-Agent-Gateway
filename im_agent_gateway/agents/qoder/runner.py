@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from ...config import Config
+from ...i18n import t
 from ..base import BaseAgent, CommandSpec
 
 logger = logging.getLogger(__name__)
@@ -78,8 +79,10 @@ class QoderRunner(BaseAgent):
 
     name = "qoder"
     label = "Qoder CN（编码）"
+    label_en = "Qoder CN (Coding)"
     kind = "coding"
     routing_hint = "编码任务：写代码、修复 bug、运行命令、git 操作、仓库文件读写"
+    routing_hint_en = "Coding tasks: write code, fix bugs, run commands, git operations, repo file access"
     # 意图关键词：编码词表由 kind=coding 默认继承，这里只追加名字直达词
     routing_keywords = ("qoder",)
 
@@ -108,7 +111,9 @@ class QoderRunner(BaseAgent):
         return self._cwds.get(chat_key, str(self.cfg.qoder_cwd_resolved))
 
     def start_hint(self, cwd: str = "", model: str = "") -> str:
-        return f"开始执行（目录：{cwd or self.cfg.qoder_cwd_resolved}）\n"
+        folder = cwd or self.cfg.qoder_cwd_resolved
+        return t(f"· {self.display_label}处理中… 目录：{folder}\n\n",
+                 f"· {self.display_label} is working… dir: {folder}\n\n")
 
     async def submit(
         self,
@@ -130,7 +135,7 @@ class QoderRunner(BaseAgent):
             worker = asyncio.create_task(self._worker(chat_key, state))
             self._workers.add(worker)
             worker.add_done_callback(lambda t: self._workers.discard(t))
-        logger.info("会话 %s 已排队任务: %.120s", chat_key, query)
+        logger.info(t("会话 %s 已排队任务: %.120s", "Session %s queued task: %.120s"), chat_key, query)
         return task.done
 
     async def stop(self, chat_key: str) -> bool:
@@ -148,7 +153,7 @@ class QoderRunner(BaseAgent):
         if state is not None:
             state.stop_requested = False
             state.session_id = str(uuid.uuid4())  # 全新 UUID，旧会话自然作废
-        logger.info("会话 %s 已重置", chat_key)
+        logger.info(t("会话 %s 已重置", "Session %s reset"), chat_key)
 
     async def list_models(self) -> list[str]:
         """列出 Qoder CN CLI 可用模型（qoderclicn --list-models）。"""
@@ -163,9 +168,13 @@ class QoderRunner(BaseAgent):
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.communicate()
-                raise TimeoutError("获取模型列表超时，请稍后重试") from None
+                raise TimeoutError(t("获取模型列表超时，请稍后重试",
+                                     "Timed out fetching models, please retry later")) from None
         except FileNotFoundError as exc:
-            raise RuntimeError(f"找不到 {self.cfg.qoder_bin}，请确认已安装 Qoder CN CLI") from exc
+            raise RuntimeError(t(
+                f"找不到 {self.cfg.qoder_bin}，请确认已安装 Qoder CN CLI",
+                f"Cannot find {self.cfg.qoder_bin}; install the Qoder CN CLI first",
+            )) from exc
 
         models: list[str] = []
         for ln in out.decode("utf-8", errors="replace").splitlines():
@@ -178,8 +187,10 @@ class QoderRunner(BaseAgent):
 
     def commands(self) -> list[CommandSpec]:
         return super().commands() + [
-            CommandSpec("/cd <目录>", "切换工作目录（支持工作区名）"),
-            CommandSpec("/ws [名称]", "列出工作区 / 切换到命名工作区"),
+            CommandSpec("/cd <目录>", t("切换工作目录（支持工作区名）",
+                                       "Switch working directory (workspace name allowed)")),
+            CommandSpec("/ws [名称]", t("列出工作区 / 切换到命名工作区",
+                                       "List workspaces / switch to a named workspace")),
         ]
 
     async def handle_command(
@@ -188,40 +199,47 @@ class QoderRunner(BaseAgent):
         """处理 /cd、/ws；其余交回基类。"""
         if cmd == "/cd":
             if not arg:
-                await send("用法：/cd <目录或工作区名>，如 /cd e:/my-project；/ws 查看工作区列表")
+                await send(t("用法：/cd <目录或工作区名>，如 /cd e:/my-project；/ws 查看工作区列表",
+                             "Usage: /cd <dir or workspace>, e.g. /cd e:/my-project; /ws lists workspaces"))
                 return True
             # 优先匹配命名工作区，其次按目录路径处理
             ws = self.cfg.workspaces.get(arg)
             path = ws if ws is not None else Path(arg).expanduser()
             if not path.is_dir():
-                await send(f"目录不存在：{path}")
+                await send(t(f"目录不存在：{path}", f"Directory does not exist: {path}"))
                 return True
             self._cwds[chat_key] = str(path.resolve())
-            await send(f"工作目录已切换为 {path.resolve()}")
+            await send(t(f"工作目录已切换为 {path.resolve()}",
+                         f"Working directory switched to {path.resolve()}"))
             return True
         if cmd in ("/ws", "/workspaces"):
             if arg:
                 ws = self.cfg.workspaces.get(arg)
                 if ws is None:
-                    await send(f"未找到工作区「{arg}」，发送 /ws 查看列表")
+                    await send(t(f"未找到工作区「{arg}」，发送 /ws 查看列表",
+                                 f"Workspace \"{arg}\" not found; send /ws to list them"))
                     return True
                 if not ws.is_dir():
-                    await send(f"工作区目录不存在：{ws}")
+                    await send(t(f"工作区目录不存在：{ws}", f"Workspace directory does not exist: {ws}"))
                     return True
                 self._cwds[chat_key] = str(ws.resolve())
-                await send(f"已切换到工作区 {arg}：{ws.resolve()}")
+                await send(t(f"已切换到工作区 {arg}：{ws.resolve()}",
+                             f"Switched to workspace {arg}: {ws.resolve()}"))
                 return True
             current = Path(self.cwd_for(chat_key)).resolve()
-            lines = ["工作区列表："]
+            lines = [t("工作区列表：", "Workspaces:")]
             if self.cfg.workspaces:
                 for name, path in self.cfg.workspaces.items():
-                    mark = " ← 当前" if path.expanduser().resolve() == current else ""
-                    missing = "（不存在）" if not path.is_dir() else ""
+                    mark = t(" ← 当前", " ← current") if path.expanduser().resolve() == current else ""
+                    missing = t("（不存在）", " (missing)") if not path.is_dir() else ""
                     lines.append(f"• {name}: {path}{missing}{mark}")
             else:
-                lines.append("（未配置命名工作区，可在 .env 的 WORKSPACES 中添加）")
-            lines.append(f"\n默认目录: {self.cfg.qoder_cwd_resolved}")
-            lines.append("切换: /ws <名称> 或 /cd <目录>")
+                lines.append(t("（未配置命名工作区，可在 .env 的 WORKSPACES 中添加）",
+                               "(No named workspaces; add WORKSPACES in .env)"))
+            lines.append(t(f"\n默认目录: {self.cfg.qoder_cwd_resolved}",
+                           f"\nDefault directory: {self.cfg.qoder_cwd_resolved}"))
+            lines.append(t("切换: /ws <名称> 或 /cd <目录>",
+                           "Switch: /ws <name> or /cd <dir>"))
             await send("\n".join(lines))
             return True
         return await super().handle_command(chat_key, cmd, arg, send)
@@ -246,7 +264,7 @@ class QoderRunner(BaseAgent):
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # 兜底：队列不能因异常停摆
-                    logger.exception("会话 %s 任务执行异常", chat_key)
+                    logger.exception(t("会话 %s 任务执行异常", "Session %s task failed"), chat_key)
                     if not task.done.done():
                         task.done.set_result(TaskResult(ok=False, text="", error=str(exc)))
                 finally:
@@ -267,9 +285,10 @@ class QoderRunner(BaseAgent):
         result = await self._run_process(chat_key, state, task)
         state.current = None
         logger.info(
-            "会话 %s 任务完成 ok=%s 输出 %d 字%s",
+            t("会话 %s 任务完成 ok=%s 输出 %d 字%s",
+              "Session %s task done ok=%s output %d chars%s"),
             chat_key, result.ok, len(result.text),
-            f"（{result.error}）" if result.error else "",
+            t(f"（{result.error}）", f" ({result.error})") if result.error else "",
         )
         if not task.done.done():
             task.done.set_result(result)
@@ -304,7 +323,8 @@ class QoderRunner(BaseAgent):
         result = await self._exec(chat_key, args_resume, task.on_output)
         if result.ok or not self._is_session_missing(result.error or ""):
             return result
-        logger.info("会话 %s 不存在，新建会话", state.session_id)
+        logger.info(t("会话 %s 不存在，新建会话", "Session %s not found; creating a new session"),
+                    state.session_id)
         result = await self._exec(chat_key, args + ["--session-id", state.session_id], task.on_output)
         return result
 
@@ -328,7 +348,7 @@ class QoderRunner(BaseAgent):
                     stderr=asyncio.subprocess.DEVNULL,
                 )
             except Exception:
-                logger.debug("taskkill 失败 pid=%s", proc.pid)
+                logger.debug(t("taskkill 失败 pid=%s", "taskkill failed pid=%s"), proc.pid)
 
     def _resolve_argv(self, args: list[str]) -> list[str]:
         """把 CLI 入口解析为可执行参数；Windows 下 .cmd/.bat 需经 cmd.exe 执行。"""
@@ -340,7 +360,7 @@ class QoderRunner(BaseAgent):
         args: list[str],
         on_output: Callable[[str], object] | None = None,
     ) -> TaskResult:
-        logger.info("启动 qoder: %s", " ".join(args[:3]) + " ...")
+        logger.info(t("启动 qoder: %s", "Starting qoder: %s"), " ".join(args[:3]) + " ...")
         try:
             proc = await asyncio.create_subprocess_exec(
                 *self._resolve_argv(args),
@@ -352,7 +372,8 @@ class QoderRunner(BaseAgent):
         except FileNotFoundError:
             return TaskResult(
                 ok=False, text="",
-                error=f"找不到 {self.cfg.qoder_bin}，请确认已安装 Qoder CN CLI",
+                error=t(f"找不到 {self.cfg.qoder_bin}，请确认已安装 Qoder CN CLI",
+                        f"Cannot find {self.cfg.qoder_bin}; install the Qoder CN CLI first"),
             )
 
         state = self._chats.get(chat_key)
@@ -402,7 +423,8 @@ class QoderRunner(BaseAgent):
             text = "\n".join(collected)
             return TaskResult(
                 ok=False, text=text, session_id=session_id,
-                error=f"任务超时（>{self.cfg.qoder_timeout_sec:.0f}s），已终止",
+                error=t(f"任务超时（>{self.cfg.qoder_timeout_sec:.0f}s），已终止",
+                        f"Task timed out (>{self.cfg.qoder_timeout_sec:.0f}s) and was stopped"),
             )
         except BaseException:
             # 输出回调异常（如长连接断开）等：终止进程，避免孤儿进程
@@ -420,12 +442,13 @@ class QoderRunner(BaseAgent):
         if proc.returncode != 0:
             return TaskResult(
                 ok=False, text=text, session_id=session_id,
-                error=f"qoder 退出码 {proc.returncode}" + (f": {stderr_text}" if stderr_text else ""),
+                error=t(f"qoder 退出码 {proc.returncode}", f"qoder exited with {proc.returncode}")
+                + (f": {stderr_text}" if stderr_text else ""),
             )
         if not text:
             return TaskResult(
                 ok=False, text="", session_id=session_id,
-                error=stderr_text or "qoder 无输出",
+                error=stderr_text or t("qoder 无输出", "qoder produced no output"),
             )
         return TaskResult(ok=True, text=text, session_id=session_id, usage=parser.usage_line())
 
@@ -534,11 +557,12 @@ class _StreamParser:
         out_t = tok("output_tokens", "outputTokens")
         parts: list[str] = []
         if in_t is not None or out_t is not None:
-            parts.append(
-                f"tokens 输入 {in_t if in_t is not None else '?'} / 输出 {out_t if out_t is not None else '?'}"
-            )
+            parts.append(t(
+                f"tokens 输入 {in_t if in_t is not None else '?'} / 输出 {out_t if out_t is not None else '?'}",
+                f"tokens in {in_t if in_t is not None else '?'} / out {out_t if out_t is not None else '?'}",
+            ))
         if self._cost_usd is not None and self._cost_usd > 0:
-            parts.append(f"费用 ${self._cost_usd:.4f}")
+            parts.append(t(f"费用 ${self._cost_usd:.4f}", f"cost ${self._cost_usd:.4f}"))
         return " · ".join(parts) if parts else None
 
     @staticmethod
@@ -567,4 +591,4 @@ class _StreamParser:
             detail = brief(inp["query"], 40)
         if not detail and inp.get("description"):
             detail = brief(inp["description"], 40)
-        return f"\n[工具] {name}" + (f" · {detail}" if detail else "")
+        return t(f"\n[工具] {name}", f"\n[tool] {name}") + (f" · {detail}" if detail else "")

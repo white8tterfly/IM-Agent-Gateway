@@ -19,6 +19,7 @@ from lark_oapi.channel import FeishuChannel as LarkChannel
 
 from ...base import IMChannel, InboundMessage
 from ....config import Config
+from ....i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +60,17 @@ def _reset_lark_ws_loop() -> None:
             try:
                 old.run_until_complete(_drain())
             except Exception:
-                logger.debug("清理飞书 SDK 残留任务异常（忽略）", exc_info=True)
+                logger.debug(t("清理飞书 SDK 残留任务异常（忽略）",
+                               "Error while cleaning up leftover Feishu SDK tasks (ignored)"), exc_info=True)
             try:
                 old.close()
             except Exception:
-                logger.debug("关闭飞书 SDK 旧事件循环异常（忽略）", exc_info=True)
+                logger.debug(t("关闭飞书 SDK 旧事件循环异常（忽略）",
+                               "Error while closing the old Feishu SDK event loop (ignored)"), exc_info=True)
         # 换上全新 loop：后续同进程再建连接时绑定新 loop，旧任务无处复活
         ws_module.loop = asyncio.new_event_loop()
     except Exception:
-        logger.exception("重置飞书 SDK 事件循环失败")
+        logger.exception(t("重置飞书 SDK 事件循环失败", "Failed to reset the Feishu SDK event loop"))
 
 
 class FeishuChannel(IMChannel):
@@ -93,11 +96,13 @@ class FeishuChannel(IMChannel):
     async def start(self) -> None:
         # 记录主 loop，供后台线程把消息投递回来
         self._main_loop = asyncio.get_running_loop()
-        logger.info("正在建立飞书长连接（App %s）", self._app_id_masked())
+        logger.info(t("正在建立飞书长连接（App %s）", "Establishing Feishu long connection (App %s)"),
+                    self._app_id_masked())
         # 阻塞式连接：SDK 在后台 loop 维持长连接，connect() 直到连接断开才返回，
         # 这样才能让 gateway.run 的 FIRST_COMPLETED 保持长期运行（与企微 run_forever 一致）。
         await self._sdk.connect()
-        logger.info("飞书长连接已断开（App %s）", self._app_id_masked())
+        logger.info(t("飞书长连接已断开（App %s）", "Feishu long connection closed (App %s)"),
+                    self._app_id_masked())
 
     async def close(self) -> None:
         # 优雅关闭：停止后台 loop 与 WS 连接，并废弃 SDK 残留在模块级
@@ -165,7 +170,9 @@ class FeishuChannel(IMChannel):
                 # 首帧：发送新消息并记录 message_id 供后续编辑
                 result = await self._sdk.send(msg.chat_id, {"text": content})
                 if not result.success or not result.message_id:
-                    logger.warning("飞书流式首帧发送失败: %s", getattr(result, "error", None))
+                    logger.warning(t("飞书流式首帧发送失败: %s",
+                                     "Failed to send the first streaming frame to Feishu: %s"),
+                                   getattr(result, "error", None))
                     return
                 if not finish:
                     self._stream_messages[stream_id] = result.message_id
