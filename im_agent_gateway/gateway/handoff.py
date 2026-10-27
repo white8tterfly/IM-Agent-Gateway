@@ -11,14 +11,37 @@ import json
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from .base import InboundMessage
+from ..config import PROJECT_ROOT
 from ..i18n import t
 
 logger = logging.getLogger(__name__)
 
 VERSION = 1
+
+# 重启交接标记：服务自发重启时先落标记，看门狗据此知道「端口即将被新实例接管」，
+# 从而不在旧实例退出瞬间抢回 webui 端口；新实例拿到实例锁后清除。
+RESTART_MARKER = PROJECT_ROOT / "logs" / ".restart_pending"
+
+
+def mark_restart() -> None:
+    """写入重启标记（服务即将退出、由新实例接管）。"""
+    try:
+        RESTART_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        RESTART_MARKER.write_text(str(int(time.time())), encoding="utf-8")
+    except OSError as exc:
+        logger.warning(t("重启标记写入失败：%s", "Failed to write restart marker: %s"), exc)
+
+
+def clear_restart() -> None:
+    """清除重启标记（新实例已接管）。"""
+    try:
+        RESTART_MARKER.unlink()
+    except OSError:
+        pass
 
 
 def dump(msg: InboundMessage, path: Path) -> None:

@@ -648,6 +648,11 @@ body.ready .card { animation: none; }
   flex-shrink: 0;
 }
 
+/* 托盘异常提示：与空闲提示同层级，用暖色与正常文案区分 */
+#status-body .idle-note.warn {
+  color: #e2c9a4;
+}
+
 /* 深色卡片内的空状态 */
 #status-body > .empty-note { color: var(--on-dark-muted); }
 

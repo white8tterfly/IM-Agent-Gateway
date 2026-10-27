@@ -13,10 +13,11 @@ import asyncio
 import logging
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from im_agent_gateway.config import load_config
-from im_agent_gateway.gateway.handoff import dump
+from im_agent_gateway.gateway.handoff import RESTART_MARKER, dump
 from im_agent_gateway.gateway.registry import Gateway
 from im_agent_gateway.gateway.watch_http import WatchHttpServer
 from im_agent_gateway.i18n import t
@@ -39,8 +40,8 @@ def _service_running() -> bool:
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
-             "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\""
-             " | Where-Object { $_.CommandLine -like '*main.py*' -and $_.CommandLine -like '*IM-Agent*' }"
+             "Get-CimInstance Win32_Process -Filter \"Name='python.exe' OR Name='pythonw.exe'\""
+             " | Where-Object { $_.CommandLine -like '*main.py*' }"
              " | Measure-Object | Select-Object -ExpandProperty Count"],
             capture_output=True, text=True, timeout=10,
             creationflags=_NO_WINDOW,
@@ -52,7 +53,33 @@ def _service_running() -> bool:
         return False
 
 
+def _restart_pending(max_age: float = 60.0) -> bool:
+    """重启标记是否有效：服务正在换实例，端口即将由新实例接管。"""
+    try:
+        return time.time() - RESTART_MARKER.stat().st_mtime < max_age
+    except OSError:
+        return False
+
+
+async def _await_handoff() -> None:
+    """重启交接：等新实例接管端口，运行期间不抢端口、不重复连 IM。
+
+    旧实例退出后看门狗若立刻托管 webui 端口，新实例 bind 会失败并直接退出。
+    因此先等重启标记消失（新实例已拿到实例锁），再有服务在跑就让它自己监听，
+    等它退出后才回到睡眠态。
+    """
+    if not _restart_pending():
+        return
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline and _restart_pending():
+        await asyncio.sleep(0.3)
+    while _service_running():
+        await asyncio.sleep(5)
+
+
 async def _session(cfg) -> None:
+    # 端口交接：服务重启中先让新实例接管，避免看门狗抢回 webui 端口
+    await _await_handoff()
     gateway = Gateway()
     wake_msg = None
     wake_event = asyncio.Event()

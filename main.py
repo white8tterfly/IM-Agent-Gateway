@@ -13,7 +13,7 @@ from pathlib import Path
 from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import Config, load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
-from im_agent_gateway.gateway.handoff import load as load_handoff
+from im_agent_gateway.gateway.handoff import clear_restart, load as load_handoff
 from im_agent_gateway.gateway.registry import Gateway
 from im_agent_gateway.i18n import t
 from im_agent_gateway.manage.api import create_router
@@ -162,6 +162,8 @@ async def amain() -> None:
         logger.warning(t("已有服务实例在运行，本次启动退出（同一机器人双连接会互踢）",
                          "Another service instance is already running; exiting (duplicate bot connections would evict each other)"))
         return
+    # 重启交接完成：实例锁已拿到，清掉标记，看门狗据此恢复睡眠态托管
+    clear_restart()
 
     check_prereqs(cfg)
 
@@ -213,7 +215,7 @@ async def amain() -> None:
     tray_icon = None
     if os.name == "nt":
         try:
-            from im_agent_gateway.tray import start_tray
+            from im_agent_gateway.tray import set_tray_error, start_tray
             tray_icon = start_tray(
                 cfg,
                 lambda: loop.call_soon_threadsafe(shutdown.set),
@@ -221,6 +223,10 @@ async def amain() -> None:
             )
         except Exception as exc:  # 托盘只是便利功能，失败不能影响服务
             logger.warning(t("托盘图标启动失败：%s", "Failed to start tray icon: %s"), exc)
+            try:
+                set_tray_error(str(exc))  # 供 Web 管理台状态展示
+            except NameError:
+                pass
 
     try:
         run_task = asyncio.create_task(gateway.run())

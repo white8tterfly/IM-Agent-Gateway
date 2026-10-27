@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import webbrowser
 from typing import Callable
@@ -13,6 +14,20 @@ from .i18n import set_language, t
 logger = logging.getLogger(__name__)
 
 ICON_FILE = PROJECT_ROOT / "assets" / "icon.ico"
+
+# 托盘状态快照：供管理台状态接口展示，避免缺依赖时托盘静默失效
+_status: dict = {"supported": os.name == "nt", "running": False, "error": None}
+
+
+def tray_status() -> dict:
+    """返回托盘状态：supported 平台是否支持、running 是否已启动、error 未启动原因。"""
+    return dict(_status)
+
+
+def set_tray_error(reason: str) -> None:
+    """记录托盘启动失败原因（供 main 捕获异常时调用）。"""
+    _status["running"] = False
+    _status["error"] = reason
 
 
 def start_tray(cfg: Config, on_quit: Callable[[], None], on_restart: Callable[[], None]):
@@ -25,8 +40,10 @@ def start_tray(cfg: Config, on_quit: Callable[[], None], on_restart: Callable[[]
         import pystray
         from PIL import Image
     except ImportError:
-        logger.info(t("未安装 pystray / Pillow，跳过托盘图标（pip install pystray pillow）",
-                      "pystray / Pillow not installed; skipping tray icon (pip install pystray pillow)"))
+        reason = t("未安装 pystray / Pillow，托盘图标不可用（执行 pip install -r requirements.txt 安装）",
+                   "pystray / Pillow not installed; tray icon unavailable (run pip install -r requirements.txt)")
+        logger.warning(reason)
+        set_tray_error(reason)
         return None
 
     try:
@@ -63,6 +80,8 @@ def start_tray(cfg: Config, on_quit: Callable[[], None], on_restart: Callable[[]
                         t("IM-Agent Gateway（右键菜单）", "IM-Agent Gateway (right-click for menu)"), menu)
     # Windows 下托盘消息循环可放在后台线程，不阻塞 asyncio 主循环
     threading.Thread(target=icon.run, name="tray-icon", daemon=True).start()
+    _status["running"] = True
+    _status["error"] = None
     logger.info(t("托盘图标已启动：右键可打开控制台、重启或退出服务",
                   "Tray icon started: right-click to open the console, restart, or quit"))
     return icon

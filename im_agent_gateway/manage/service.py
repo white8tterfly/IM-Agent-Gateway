@@ -20,8 +20,10 @@ from typing import Callable
 from ..agents.registry import AgentRegistry
 from ..config import PROJECT_ROOT, Config
 from ..gateway.registry import Gateway
+from ..gateway.handoff import mark_restart
 from ..i18n import t
 from ..router.dispatcher import MessageRouter
+from ..tray import tray_status
 
 # 最近任务环形缓冲条数
 RECENT_TASKS = 50
@@ -202,6 +204,8 @@ class ManageService:
         """
         if self._shutdown_event is None:
             return False
+        # 先落重启标记：看门狗据此不抢回 webui 端口，等新实例接管后再恢复托管
+        mark_restart()
         # Web 控制台未开启时无需等端口，交给新实例的单实例锁重试兜底
         spawn_replacement(self.cfg.webui_port if self.cfg.webui_enabled else 0)
         return self.request_shutdown(delay)
@@ -236,6 +240,8 @@ class ManageService:
                 "idle_min": self.cfg.idle_exit_min,
                 "idle_sec": round(self.router.idle_seconds(), 1),
             },
+            # 托盘状态：缺依赖等情况下托盘不可用，管理台据此提示而不是静默失效
+            "tray": tray_status(),
         }
 
     def agents(self) -> list[dict]:

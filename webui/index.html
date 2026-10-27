@@ -357,6 +357,14 @@
     return `<p class="idle-note"><span class="idle-dot"></span>${text}</p>`;
   }
 
+  // 托盘异常提示：Windows 下缺依赖时右下角不会出现图标，这里给出原因而不是静默失效
+  function trayProblem(st) {
+    const tr = st.tray || {};
+    if (!tr.supported || tr.running) return '';
+    const reason = tr.error || t('托盘图标未启动，详见日志', 'Tray icon not started; see logs');
+    return `<p class="idle-note warn">${t('托盘图标', 'Tray icon')}：${esc(reason)}</p>`;
+  }
+
   // 运行状态：三块指标先给结论，再用通道徽章给出细节
   async function renderStatus() {
     const st = await getStatus();
@@ -387,6 +395,7 @@
         </div>
       </div>
       ${channelHtml}
+      ${trayProblem(st)}
       ${idleNote(st)}`;
   }
 
