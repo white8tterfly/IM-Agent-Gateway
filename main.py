@@ -132,10 +132,16 @@ async def replay_pending(router: MessageRouter, gateway: Gateway, cfg: Config) -
 
 
 async def idle_monitor(router: MessageRouter, gateway: Gateway, cfg: Config) -> None:
-    """空闲自动退：空闲超阈值且无任务时关闭网关，触发服务退出。"""
+    """空闲自动退：空闲超阈值且无任务时关闭网关，触发服务退出。
+
+    开关与阈值都可热更新，所以监控任务常驻运行，每轮读取当前配置；
+    关掉开关时只是不触发退出，服务继续常驻。
+    """
     logger = logging.getLogger("main")
     while True:
         await asyncio.sleep(10)
+        if not cfg.idle_exit:
+            continue
         if router.is_idle(cfg.idle_exit_min * 60):
             logger.info(t("空闲超过 %.0f 分钟，服务自动退出", "Idle for over %.0f minutes; service exiting"),
                         cfg.idle_exit_min)
@@ -208,7 +214,11 @@ async def amain() -> None:
     if os.name == "nt":
         try:
             from im_agent_gateway.tray import start_tray
-            tray_icon = start_tray(cfg, lambda: loop.call_soon_threadsafe(shutdown.set))
+            tray_icon = start_tray(
+                cfg,
+                lambda: loop.call_soon_threadsafe(shutdown.set),
+                manage.request_restart,
+            )
         except Exception as exc:  # 托盘只是便利功能，失败不能影响服务
             logger.warning(t("托盘图标启动失败：%s", "Failed to start tray icon: %s"), exc)
 
@@ -218,8 +228,8 @@ async def amain() -> None:
         tasks = {run_task, stop_task}
         # 看门狗唤醒交接：等服务建立长连接后重放待处理消息
         await replay_pending(router, gateway, cfg)
-        if cfg.idle_exit:
-            tasks.add(asyncio.create_task(idle_monitor(router, gateway, cfg)))
+        # 空闲监控常驻：IDLE_EXIT 可在管理台热开关，退出与否由监控循环判断
+        tasks.add(asyncio.create_task(idle_monitor(router, gateway, cfg)))
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in pending:
             task.cancel()

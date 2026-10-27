@@ -187,10 +187,10 @@ class QoderRunner(BaseAgent):
 
     def commands(self) -> list[CommandSpec]:
         return super().commands() + [
-            CommandSpec("/cd <目录>", t("切换工作目录（支持工作区名）",
-                                       "Switch working directory (workspace name allowed)")),
-            CommandSpec("/ws [名称]", t("列出工作区 / 切换到命名工作区",
-                                       "List workspaces / switch to a named workspace")),
+            CommandSpec(t("/cd <目录>", "/cd <dir>"), t("切换工作目录（支持工作区名）",
+                                                       "Switch working directory (workspace name allowed)")),
+            CommandSpec(t("/ws [名称]", "/ws [name]"), t("列出工作区 / 切换到命名工作区",
+                                                       "List workspaces / switch to a named workspace")),
         ]
 
     async def handle_command(

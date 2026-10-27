@@ -89,7 +89,7 @@ python main.py
 
 双击桌面上的「IM-Agent Gateway」快捷方式会弹出启动窗口：服务在后台无窗口运行，就绪后自动打开 Web 控制台（开启时）并关闭窗口；启动失败或已有实例在运行时会在窗口里直接说明原因。日志同样写入 `logs/im_agent_gateway.log`。
 
-服务运行时任务栏右下角会出现「IM-Agent Gateway」托盘图标：右键可打开 Web 控制台或聊天台，选择「退出服务」即可优雅关闭（等同 `Ctrl+C`，会先断开各 IM 连接）。托盘依赖 `pystray`，缺失时服务照常启动，只是没有图标。
+服务运行时任务栏右下角会出现「IM-Agent Gateway」托盘图标：右键可打开 Web 控制台或聊天台，选择「重启服务」会在退出后自动拉起新实例，选择「退出服务」即可优雅关闭（等同 `Ctrl+C`，会先断开各 IM 连接）。托盘依赖 `pystray`，缺失时服务照常启动，只是没有图标。
 
 首次运行 `run.bat` 时会在桌面创建一次「IM-Agent Gateway」快捷方式（带专用图标），之后不论它是否还在都不再创建或修改。需要按最新参数重建时，双击 `create_shortcut.bat`，或执行 `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`。
 
@@ -250,7 +250,7 @@ python manage.py config check   # 检查通道必填项、白名单与 Agent 前
 | --- | --- | --- |
 | `WATCH_ENABLED` | `watcher.py` | 总开关：`1` = 待命进程监听并唤醒服务，`0` = 启动即退出 |
 | `WATCH_AUTOSTART` | `watcher.py` | 开机自启：`1` = 登录后静默启动（默认），`0` = 不随开机启动（下次开机生效） |
-| `IDLE_EXIT` | `main.py` | 空闲自动休息：`1` = 超过 `IDLE_EXIT_MIN` 分钟无消息则退出，`0` = 常驻 |
+| `IDLE_EXIT` | `main.py` | 空闲自动休息：`1` = 超过 `IDLE_EXIT_MIN` 分钟无消息则退出（默认），`0` = 常驻 |
 
 工作流程：待命进程只加载通道，收到消息时先回一条占位文案并把消息写入交接文件，随后启动完整服务；服务读取交接文件重新处理该消息，并通过 `send_push` 回传结果；空闲超过阈值后退出，待命进程重新接管。
 

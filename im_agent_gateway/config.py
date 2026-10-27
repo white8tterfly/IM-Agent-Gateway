@@ -123,7 +123,7 @@ class Config:
     # 开机自动启动看门狗：0=登录后计划任务拉起的看门狗读配置即退出，1=正常监听。
     # 只影响「下次开机是否拉起」，不改变本次已在运行的看门狗。
     watch_autostart: bool = True
-    idle_exit: bool = False          # 服务空闲自动退开关：1=空闲超时退出，0=常驻
+    idle_exit: bool = True           # 服务空闲自动退开关：1=空闲超时退出（默认），0=常驻
     idle_exit_min: float = 10.0      # 空闲判定分钟数（仅 idle_exit=True 生效）
     wake_reply: str = ""             # 看门狗唤醒前的占位回复文案；空 = 按 LANGUAGE 自动选择
     service_cmd: str = "python main.py"  # 看门狗拉起服务所用命令
@@ -255,10 +255,12 @@ HOT_PARSERS: dict[str, tuple[str, "object"]] = {
     "JEV_MIN_CONFIDENCE": ("jev_min_confidence", lambda v: float(v or 0.5)),
     "COMPLEXITY_ROUTE": ("complexity_route", lambda v: v.lower() in ("1", "true", "yes")),
     "DEFAULT_AGENT": ("default_agent", lambda v: v.lower() or "siliconflow"),
+    "ENABLED_AGENTS": ("enabled_agents", lambda v: {a.strip().lower() for a in v.split(",") if a.strip()}),
     "AGENT_KINDS": ("agent_kinds", lambda v: _parse_agent_map(v, VALID_AGENT_KINDS, "AGENT_KINDS")),
     "AGENT_COMPLEXITY": ("agent_complexity", lambda v: _parse_agent_map(v, VALID_COMPLEXITY, "AGENT_COMPLEXITY")),
     # 安全与休眠
     "ALLOWED_USERS": ("allowed_users", lambda v: {u.strip() for u in v.split(",") if u.strip()}),
+    "IDLE_EXIT": ("idle_exit", lambda v: v.lower() not in ("0", "false", "no")),
     "IDLE_EXIT_MIN": ("idle_exit_min", lambda v: float(v or 10)),
     "FIRST_USE_GUIDE": ("first_use_guide", lambda v: v.lower() not in ("0", "false", "no")),
     # 界面语言：热更新后同时切换全局默认语言
@@ -290,7 +292,8 @@ HOT_PARSERS: dict[str, tuple[str, "object"]] = {
     # CLI 路径（available 每次读，改后新任务自动用新路径）
     "QODER_BIN": ("qoder_bin", lambda v: v or "qoderclicn"),
     "WORKBUDDY_BIN": ("workbuddy_bin", lambda v: v or "codebuddy"),
-    # 流式与日志
+    # 流式、心跳与日志
+    "HEARTBEAT_INTERVAL_SEC": ("heartbeat_interval_sec", lambda v: float(v or 30)),
     "STREAM_INTERVAL_SEC": ("stream_interval_sec", lambda v: float(v or 1.0)),
     "STREAM_CHUNK_SIZE": ("stream_chunk_size", lambda v: int(v or 200)),
     "LOG_LEVEL": ("log_level", lambda v: (v or "INFO").upper()),
@@ -381,7 +384,8 @@ def load_config(env_file: Path | None = None) -> Config:
         watch_enabled=_env("WATCH_ENABLED").lower() in ("1", "true", "yes"),
         # 留空按开启处理：老 .env 没有这一项时保持「登录即启动」的原有行为
         watch_autostart=_env("WATCH_AUTOSTART").lower() not in ("0", "false", "no"),
-        idle_exit=_env("IDLE_EXIT").lower() in ("1", "true", "yes"),
+        # 缺省开启：老的 .env 没有这一项时也按空闲自动休息处理
+        idle_exit=_env("IDLE_EXIT", "1").lower() not in ("0", "false", "no"),
         idle_exit_min=float(_env("IDLE_EXIT_MIN") or 10),
         wake_reply=_env("WAKE_REPLY"),
         service_cmd=_env("SERVICE_CMD") or "python main.py",

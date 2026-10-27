@@ -15,6 +15,7 @@
     <a href="chat.html" data-i18n="聊天台||Chat">聊天台</a>
   </nav>
   <div class="spacer"></div>
+  <button id="restart-btn" type="button" class="btn ghost small" data-i18n="重启服务||Restart">重启服务</button>
   <button id="lang-btn" type="button" class="lang-btn" title="Switch language">EN</button>
   <span id="state-badge" class="badge hidden">检测中</span>
 </header>
@@ -138,7 +139,7 @@
   // 管理台页面逻辑：三态探测（在线 / 睡眠 / 离线）+ 各区块渲染 + 轮询刷新
   import {
     detectState, getStatus, getAgents, setAgentActive,
-    getTasks, getLogs, getConfig, setConfig, wakeService,
+    getTasks, getLogs, getConfig, setConfig, wakeService, restartService,
   } from './js/api.js';
   import { applyI18n, getLang, initLang, onLangChange, setLang, t } from './js/i18n.js';
 
@@ -151,6 +152,7 @@
   const wakeBtn = $('#wake-btn');
   const overlayTip = $('#overlay-tip');
   const langBtn = $('#lang-btn');
+  const restartBtn = $('#restart-btn');
 
   // ---------- 语言切换 ----------
   // 按钮显示的是「点一下会切到的语言」：中文界面显示 EN，英文界面显示 中
@@ -176,6 +178,37 @@
   applyI18n();
   renderPageTitle();
   stateBadge.textContent = t('检测中', 'Checking');
+
+  // ---------- 重启服务 ----------
+  // 后端会退出当前实例，并由独立进程在端口释放后拉起新实例；
+  // 这里轮询探测到新实例在线后整页刷新（令牌随重启更换，刷新最省事）
+  restartBtn.addEventListener('click', async () => {
+    const ask = t('确定重启服务？重启期间约有几秒无法访问页面。',
+                  'Restart the service? The page will be unreachable for a few seconds.');
+    if (!confirm(ask)) return;
+    restartBtn.disabled = true;
+    restartBtn.textContent = t('重启中…', 'Restarting…');
+    try {
+      await restartService();
+    } catch (_) { /* 请求可能随旧实例退出而中断，继续等待新实例上线 */ }
+    // 先等旧实例真正下线，否则立刻探测会命中它，误判重启完成
+    const offlineBy = Date.now() + 20000;
+    while (Date.now() < offlineBy && await detectState() === 'online') {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const onlineBy = Date.now() + 50000;
+    while (Date.now() < onlineBy) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (await detectState() === 'online') {
+        location.reload();
+        return;
+      }
+    }
+    restartBtn.disabled = false;
+    applyI18n();
+    alert(t('重启超时，请从桌面快捷方式或托盘菜单重新启动服务。',
+            'Restart timed out; start the service again from the desktop shortcut or tray menu.'));
+  });
 
   // 语言变化：静态文案已由监听器统一重设，动态区块清指纹后重绘
   onLangChange(() => {

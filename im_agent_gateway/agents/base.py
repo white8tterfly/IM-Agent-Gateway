@@ -158,8 +158,8 @@ class BaseAgent(ABC):
     def commands(self) -> list[CommandSpec]:
         """该 Agent 提供的指令集（子类可追加特有指令）。"""
         return [
-            CommandSpec("/model <模型>", t("切换本会话模型（/models 查看可用列表）",
-                                          "Switch the model for this chat (/models to list)")),
+            CommandSpec(t("/model <模型>", "/model <name>"), t("切换本会话模型（/models 查看可用列表）",
+                                                              "Switch the model for this chat (/models to list)")),
             CommandSpec("/models", t("列出可用模型", "List available models")),
             CommandSpec("/stop", t("终止当前正在执行的任务", "Stop the running task")),
             CommandSpec("/reset", t("清空会话记忆，开启新会话", "Clear this chat and start a new session")),

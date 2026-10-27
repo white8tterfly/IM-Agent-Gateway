@@ -89,7 +89,7 @@ You can also run `run.bat`. Logs go to both the console and `logs/im_agent_gatew
 
 Double-clicking the "IM-Agent Gateway" desktop shortcut opens a startup window: the service runs in the background without a console, opens the Web console once it is ready (when enabled), then the window closes itself. Startup failures or an already-running instance are reported right in that window. Logs still go to `logs/im_agent_gateway.log`.
 
-While the service runs, an "IM-Agent Gateway" tray icon appears in the notification area. Right-click it to open the Web console or chat console, or choose "退出服务" to shut down gracefully (same as `Ctrl+C`, closing IM connections first). The tray needs `pystray`; if it is missing, the service still starts, just without the icon.
+While the service runs, an "IM-Agent Gateway" tray icon appears in the notification area. Right-click it to open the Web console or chat console, choose "Restart service" to exit and relaunch automatically, or choose "Quit" to shut down gracefully (same as `Ctrl+C`, closing IM connections first). The tray needs `pystray`; if it is missing, the service still starts, just without the icon.
 
 The first run of `run.bat` creates an "IM-Agent Gateway" desktop shortcut once, with its own icon. After that the shortcut is never created or modified again, whether it still exists or not. To rebuild it with the latest arguments, run `create_shortcut.bat` or `powershell -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Force`.
 
@@ -250,7 +250,7 @@ Disabled by default. When enabled, three independent switches control it:
 | --- | --- | --- |
 | `WATCH_ENABLED` | `watcher.py` | Master switch: `1` = the standby process listens and wakes the service; `0` = exit immediately |
 | `WATCH_AUTOSTART` | `watcher.py` | Start at login: `1` = start silently at login (default); `0` = do not start at login (takes effect next boot) |
-| `IDLE_EXIT` | `main.py` | Idle exit: `1` = exit after `IDLE_EXIT_MIN` minutes without messages; `0` = stay resident |
+| `IDLE_EXIT` | `main.py` | Idle exit: `1` = exit after `IDLE_EXIT_MIN` minutes without messages (default); `0` = stay resident |
 
 How it works: the standby process loads only the channels. When a message arrives it first sends a placeholder reply, writes the message to a handoff file, and then starts the full service. The service reads the handoff file, processes the message again, and delivers the result through `send_push`. Once idle beyond the threshold it exits and the standby process takes over again.
 

@@ -8,7 +8,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import subprocess
+import sys
 from collections import deque
 from dataclasses import fields
 from pathlib import Path
@@ -28,6 +31,63 @@ _SENSITIVE_NAME_RE = re.compile(r"key|secret|token|pat|password", re.IGNORECASE)
 
 # 默认日志文件：main.py 的 setup_logging 落盘位置
 DEFAULT_LOG_FILE = PROJECT_ROOT / "logs" / "im_agent_gateway.log"
+
+# 重启用的独立进程脚本：等旧实例让出端口后再拉起 main.py。
+# 不放在服务进程里重新执行，是因为新实例需要一个干净的 asyncio 事件循环与进程级资源。
+_RESTART_WORKER = r'''
+import os, socket, subprocess, sys, time
+
+root, port, exe = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+
+def serving() -> bool:
+    """旧实例是否仍占着 Web 端口。"""
+    if port <= 0:
+        return False
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+# 等旧实例释放端口（最多 30 秒）：否则新实例会因端口被占用启动失败
+deadline = time.time() + 30
+while serving() and time.time() < deadline:
+    time.sleep(0.2)
+
+os.makedirs(os.path.join(root, "logs"), exist_ok=True)
+out = open(os.path.join(root, "logs", "restart_service.log"), "ab")
+subprocess.Popen(
+    [exe, os.path.join(root, "main.py")],
+    cwd=root,
+    stdin=subprocess.DEVNULL,
+    stdout=out,
+    stderr=out,
+    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0),
+)
+out.close()
+'''
+
+
+def spawn_replacement(port: int = 0) -> None:
+    """拉起独立进程，在旧实例退出后启动新实例（托盘与 Web 管理台的重启共用）。"""
+    exe = Path(sys.executable)
+    pythonw = exe.with_name("pythonw.exe")
+    if pythonw.exists():  # 和服务启动方式一致：无窗口运行
+        exe = pythonw
+    flags = 0
+    if os.name == "nt":
+        flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
+                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    subprocess.Popen(
+        [sys.executable, "-c", _RESTART_WORKER, str(PROJECT_ROOT), str(port), str(exe)],
+        cwd=str(PROJECT_ROOT),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+        start_new_session=(os.name != "nt"),
+        close_fds=True,
+    )
 
 
 def _format_config_value(field: str, val: object) -> str:
@@ -134,6 +194,17 @@ class ManageService:
                 self._loop.call_later, delay, self._shutdown_event.set
             )
         return True
+
+    def request_restart(self, delay: float = 0.5) -> bool:
+        """重启服务：先挂好「退出后拉起新实例」的等待进程，再请求优雅退出。
+
+        Web 管理台与托盘共用：调用方无需关心由谁启动，退出后新实例会自动接管。
+        """
+        if self._shutdown_event is None:
+            return False
+        # Web 控制台未开启时无需等端口，交给新实例的单实例锁重试兜底
+        spawn_replacement(self.cfg.webui_port if self.cfg.webui_enabled else 0)
+        return self.request_shutdown(delay)
 
     # ---------- 任务事件 ----------
 

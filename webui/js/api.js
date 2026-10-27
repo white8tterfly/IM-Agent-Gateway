@@ -97,3 +97,6 @@ export function setConfig(key, value) {
 
 // 睡眠态一键唤醒（由看门狗托管的 /api/wake 处理）
 export const wakeService = () => json('/api/wake', { method: 'POST' });
+
+// 重启服务：当前实例退出后由独立进程自动拉起新实例
+export const restartService = () => json('/api/restart', { method: 'POST' });

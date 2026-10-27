@@ -33,10 +33,13 @@ def normalize(lang: str) -> str:
 
 
 def set_language(lang: str) -> str:
-    """设置全局默认语言（配置加载与热更新时调用）。"""
+    """设置全局默认语言（配置加载与热更新时调用）。
+
+    只改全局默认值，不写 ContextVar：已被复制的任务上下文（IM 长连接、看门狗）
+    仍持有启动时的旧语言，写 ContextVar 只影响当前协程，切换后这些任务不会更新。
+    """
     global _default
     _default = normalize(lang)
-    _current.set(_default)
     return _default
 
 
@@ -80,4 +83,4 @@ def parse_accept_language(header: str) -> str:
             continue
         if q > best_q:
             best, best_q = code, q
-    return normalize(best) if best else get_language()
+    return normalize(best) if best else _default

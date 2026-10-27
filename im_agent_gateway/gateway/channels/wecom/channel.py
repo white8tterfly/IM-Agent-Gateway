@@ -45,6 +45,13 @@ class WeComChannel(IMChannel):
         # 服务被看门狗唤醒后重放消息前，用它确认长连接已就绪
         return self._client.connected.is_set()
 
+    def apply_config(self, cfg: Config) -> None:
+        """热更新连接参数：心跳间隔在每轮心跳时读取，改完下一轮即生效。
+
+        凭证（BOT_ID / SECRET / WECOM_WS_URL）改的是长连接身份，仍需重启服务。
+        """
+        self._client.heartbeat_interval = cfg.heartbeat_interval_sec
+
     # ---------- 报文归一化 ----------
 
     async def _on_raw_msg(self, body: dict) -> None:

@@ -128,7 +128,7 @@ class MessageRouter:
             if not cmds:
                 continue
             lines.append("")
-            lines.append(f"【{agent.display_label}】")
+            lines.append(t(f"【{agent.display_label}】", f"[{agent.display_label}]"))
             lines.extend(f"{c.usage:<20}{c.brief}" for c in cmds)
         return "\n".join(lines)
 

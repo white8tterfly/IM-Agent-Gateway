@@ -80,6 +80,17 @@ def create_router(service: ManageService) -> APIRouter:
             service.registry.apply_meta_overrides(
                 service.cfg.agent_kinds, service.cfg.agent_complexity
             )
+        if key == "ENABLED_AGENTS":
+            # 与启动语义保持一致：留空 = 全部启用；这里逐个同步到注册表的活跃状态
+            wanted = service.cfg.enabled_agents
+            for name in service.registry.names:
+                service.registry.set_active(name, not wanted or name in wanted)
+        if key == "HEARTBEAT_INTERVAL_SEC":
+            # 心跳间隔由通道每轮读取，已建立的连接无需重建
+            channel = service.gateway.get("wecom") if service.gateway else None
+            apply = getattr(channel, "apply_config", None)
+            if callable(apply):
+                apply(service.cfg)
         if key in ("JEV_BASE_URL", "JEV_TIMEOUT_SEC"):
             await service.router.jev.reconfigure()
         if key in ("SF_BASE_URL", "SF_TIMEOUT_SEC", "API_KEY"):
@@ -94,5 +105,10 @@ def create_router(service: ManageService) -> APIRouter:
     def shutdown() -> dict:
         """退出服务：管理台调用后优雅关闭网关与各 Agent（需要会话令牌）。"""
         return {"ok": service.request_shutdown()}
+
+    @api.post("/api/restart")
+    def restart() -> dict:
+        """重启服务：退出当前实例，由独立进程在端口释放后拉起新实例。"""
+        return {"ok": service.request_restart()}
 
     return api

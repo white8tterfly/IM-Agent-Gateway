@@ -121,7 +121,9 @@ async def main() -> None:
         check(r.status_code == 200, "status 返回 200")
         body = r.json()
         check(body["state"] == "running", "status 标记在线态")
-        check(body["idle"]["exit_enabled"] is False and "idle_sec" in body["idle"], "status 含空闲信息")
+        # 空闲自动休息默认开启，这里只校验字段类型与倒计时存在，不绑定具体默认值
+        check(isinstance(body["idle"]["exit_enabled"], bool) and "idle_sec" in body["idle"],
+              "status 含空闲信息")
         check(body["channels"] == [], "无网关时通道列表为空")
 
         # GET /api/agents
