@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..base import AgentResult, BaseAgent
-from ..qoder.runner import resolve_cli_argv
+from ..qoder.runner import hidden_process_kwargs, resolve_cli_argv
 from ...i18n import t
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,7 @@ async def _kill_tree(proc: asyncio.subprocess.Process) -> None:
                 "taskkill", "/F", "/T", "/PID", str(proc.pid),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
+                **hidden_process_kwargs(),
             )
         except Exception:
             logger.debug(t("taskkill 失败 pid=%s", "taskkill failed pid=%s"), proc.pid)
@@ -341,6 +342,7 @@ class TraeAgent(BaseAgent):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self._cwd,
                 env=self._child_env(),
+                **hidden_process_kwargs(),
             )
         except FileNotFoundError:
             return AgentResult(

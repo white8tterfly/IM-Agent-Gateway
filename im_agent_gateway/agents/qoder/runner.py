@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +47,13 @@ def resolve_cli_argv(args: list[str]) -> list[str]:
     if bin_path.lower().endswith((".cmd", ".bat")):
         resolved = [os.environ.get("COMSPEC", "cmd.exe"), "/c"] + resolved
     return resolved
+
+
+def hidden_process_kwargs() -> dict[str, int]:
+    """Windows 下以无窗口方式启动子进程，避免服务后台运行时弹出黑色控制台窗口。"""
+    if os.name != "nt":
+        return {}
+    return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
 
 
 @dataclass
@@ -162,6 +170,7 @@ class QoderRunner(BaseAgent):
                 *resolve_cli_argv([self.cfg.qoder_bin, "--list-models"]),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **hidden_process_kwargs(),
             )
             try:
                 out, _err = await asyncio.wait_for(proc.communicate(), timeout=30)
@@ -346,6 +355,7 @@ class QoderRunner(BaseAgent):
                     "taskkill", "/F", "/T", "/PID", str(proc.pid),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
+                    **hidden_process_kwargs(),
                 )
             except Exception:
                 logger.debug(t("taskkill 失败 pid=%s", "taskkill failed pid=%s"), proc.pid)
@@ -368,6 +378,7 @@ class QoderRunner(BaseAgent):
                 stderr=asyncio.subprocess.PIPE,
                 env=self._build_env(),
                 cwd=self.cfg.qoder_cwd_resolved,
+                **hidden_process_kwargs(),
             )
         except FileNotFoundError:
             return TaskResult(

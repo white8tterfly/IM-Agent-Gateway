@@ -19,7 +19,12 @@ from typing import Callable
 from ...config import Config
 from ...i18n import t
 from ..base import BaseAgent
-from ..qoder.runner import _StreamParser, chat_session_key, resolve_cli_argv
+from ..qoder.runner import (
+    _StreamParser,
+    chat_session_key,
+    hidden_process_kwargs,
+    resolve_cli_argv,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +164,7 @@ class WorkBuddyAgent(BaseAgent):
                 *resolve_cli_argv([self.cfg.workbuddy_bin, "--help"]),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                **hidden_process_kwargs(),
             )
             try:
                 out, _err = await asyncio.wait_for(proc.communicate(), timeout=30)
@@ -288,6 +294,7 @@ class WorkBuddyAgent(BaseAgent):
                     "taskkill", "/F", "/T", "/PID", str(proc.pid),
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
+                    **hidden_process_kwargs(),
                 )
             except Exception:
                 logger.debug(t("taskkill 失败 pid=%s", "taskkill failed pid=%s"), proc.pid)
@@ -307,6 +314,7 @@ class WorkBuddyAgent(BaseAgent):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.cfg.workbuddy_cwd,
+                **hidden_process_kwargs(),
             )
         except FileNotFoundError:
             return WBResult(
