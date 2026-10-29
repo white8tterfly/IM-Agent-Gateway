@@ -104,9 +104,10 @@ class WeComChannel(IMChannel):
         await self._client.send_stream(msg.reply_token, stream_id, content, finish)
 
     async def send_push(self, msg: InboundMessage, content: str) -> None:
-        # 交棒后 reply_token 失效：按 chatid 主动推送，不依赖入站消息的连接
-        chat_type = 2 if msg.chat_type == "group" else 1
-        await self._client.send_push_markdown(msg.chat_id, chat_type, content)
+        # 交棒后 reply_token 失效：按会话身份主动推送，不依赖入站消息的连接。
+        # 单聊回调里没有 chatid，主动推送要用用户 userid 作为 chatid。
+        chatid = msg.chat_id or msg.user_id
+        await self._client.send_push_markdown(chatid, content)
 
     async def send_welcome(self, evt: InboundEvent, content: str) -> None:
         # 企微要求进入会话事件后 5 秒内用专用欢迎语指令回复

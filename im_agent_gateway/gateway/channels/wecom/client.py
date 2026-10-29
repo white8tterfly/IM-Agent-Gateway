@@ -267,14 +267,17 @@ class WeComBotClient:
             "body": {"msgtype": "text", "text": {"content": content}},
         })
 
-    async def send_push_markdown(self, chatid: str, chat_type: int, content: str) -> None:
-        """主动推送 markdown 消息（chat_type: 1=单聊 2=群聊）。"""
+    async def send_push_markdown(self, chatid: str, content: str) -> None:
+        """主动推送 markdown 消息：chatid 单聊填用户 userid，群聊填群聊 chatid。
+
+        企微协议只认 chatid 字段（没有 chat_type），单聊回调不带 chatid，
+        因此由调用方按会话类型选好标识，缺失时接口会报 86201 chatid missing。
+        """
         await self._send({
             "cmd": "aibot_send_msg",
             "headers": {"req_id": new_req_id()},
             "body": {
                 "chatid": chatid,
-                "chat_type": chat_type,
                 "msgtype": "markdown",
                 "markdown": {"content": content},
             },
