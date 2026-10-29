@@ -254,14 +254,15 @@ Disabled by default. When enabled, three independent switches control it:
 
 How it works: the standby process loads only the channels. When a message arrives it first sends a placeholder reply, writes the message to a handoff file, and then starts the full service. The service reads the handoff file, processes the message again, and delivers the result through `send_push`. Once idle beyond the threshold it exits and the standby process takes over again.
 
-Windows autostart:
+Windows autostart needs no manual setup: with `WATCH_ENABLED=1` and `WATCH_AUTOSTART=1`, the service writes the current user's autostart entry (`HKCU\...\Run`, no admin required) on startup and removes it when the switch is off. Before every graceful exit the service spawns the standby process, closing the sleep-wake loop. The standby process also holds a process lock, so launching it from several sources at once still keeps a single instance.
+
+The legacy scheduled task can be removed if it was installed before:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1             # install
-powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall  # uninstall
+powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall
 ```
 
-The scheduled task starts the standby process with `pythonw.exe`, and starts the service and probe processes with the no-window flag, so no console window appears at login. With `WATCH_ENABLED=1`, let the standby process hold the connection instead of running `main.py` for long periods; the two would compete for the same bot connection.
+Both the standby process and the service run windowless via `pythonw.exe`. With `WATCH_ENABLED=1`, let the standby process hold the connection; if the service is started manually, the standby process yields the connection instead of competing for it.
 
 ## Web Console
 
@@ -325,7 +326,7 @@ Exit codes: `0` means the command completed (including `config check` finding pr
 ## FAQ
 
 - **Repeated reconnects**: some IMs allow only one long connection. Make sure no other process subscribes to the same account; with wake-on-message, only one of the standby process and the service may hold the connection at a time.
-- **The service does not start after enabling wake-on-message**: confirm `WATCH_ENABLED=1`, `WATCH_AUTOSTART=1`, and that `scripts\install_watcher.ps1` has been installed; then check `logs/im_agent_gateway.log`.
+- **The service does not start after enabling wake-on-message**: confirm `WATCH_ENABLED=1`, `WATCH_AUTOSTART=1`, and that the service has completed at least one full run (it spawns the standby process on exit and writes the autostart entry on startup); then check `logs/im_agent_gateway.log` for "Watchdog started".
 - **Garbled replies or timeouts**: check `logs/im_agent_gateway.log`; increase the agent timeout setting if needed.
 - **Chat is unavailable**: confirm the chat agent's API key is valid and `python manage.py config check` reports no missing items.
 - **An agent shows as unavailable**: prerequisites are not met (CLI not installed, not signed in, or credentials missing). After fixing them, run `python manage.py agent on <name>`.

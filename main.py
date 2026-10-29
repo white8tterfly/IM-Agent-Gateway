@@ -13,8 +13,9 @@ from pathlib import Path
 from im_agent_gateway.agents.registry import AgentRegistry
 from im_agent_gateway.config import Config, load_config
 from im_agent_gateway.gateway.base import IMChannel, InboundMessage
-from im_agent_gateway.gateway.handoff import clear_restart, load as load_handoff
+from im_agent_gateway.gateway.handoff import RESTART_MARKER, clear_restart, load as load_handoff
 from im_agent_gateway.gateway.registry import Gateway
+from im_agent_gateway.gateway.watch_launch import spawn_watcher, sync_autostart
 from im_agent_gateway.i18n import t
 from im_agent_gateway.manage.api import create_router
 from im_agent_gateway.manage.service import ManageService
@@ -25,17 +26,17 @@ LOG_DIR = Path(__file__).parent / "logs"
 LOCK_FILE = LOG_DIR / "service.lock"
 
 
-def acquire_instance_lock(wait: float = 8.0):
-    """独占服务锁：同一时间只允许一个实例，避免同一机器人双连接互踢。
+def acquire_instance_lock(wait: float = 8.0, path: Path = LOCK_FILE):
+    """独占进程锁：同一锁文件同时只允许一个进程持有。
 
-    无窗口启动（桌面快捷方式）与手动启动都会经过这里。进程退出时由系统释放，
-    因此空闲自动退出后下次仍能正常启动。
+    服务用它避免同一机器人双连接互踢；看门狗复用同一实现，用独立锁文件保证
+    开机启动项与手动启动等来源不会拉起多个待命进程。进程退出时由系统释放。
 
-    托盘退出后立刻双击快捷方式时，上一个实例还在关闭 IM 长连接、尚未释放锁。
-    此时短暂等待它退出（默认 8 秒）再拿锁，否则本次启动会误判为「已有实例」而退出。
+    托盘退出后立刻双击快捷方式时，上一个实例还在关闭长连接、尚未释放锁。
+    此时短暂等待它退出（默认 8 秒）再拿锁，否则会误判为「已有实例」而退出。
     """
-    LOG_DIR.mkdir(exist_ok=True)
-    handle = open(LOCK_FILE, "a+")
+    path.parent.mkdir(exist_ok=True)
+    handle = open(path, "a+")
     deadline = time.time() + wait
     while True:
         try:
@@ -165,6 +166,10 @@ async def amain() -> None:
     # 重启交接完成：实例锁已拿到，清掉标记，看门狗据此恢复睡眠态托管
     clear_restart()
 
+    # 看门狗接线：WATCH_ENABLED=1 时由服务维护开机启动项，退出时再拉起待命进程。
+    # 路径独立于计划任务安装脚本，打开开关后无需再手动注册。
+    sync_autostart(cfg)
+
     check_prereqs(cfg)
 
     # Agent 接入：按 .env 的 AGENTS 声明加载，实现 BaseAgent 并暴露 Agent 类即可接入
@@ -249,6 +254,9 @@ async def amain() -> None:
         if tray_icon is not None:
             tray_icon.stop()
         await gateway.close()
+        # 睡-醒闭环：连接释放后再拉起待命进程；重启交接时跳过（新实例即将接管）
+        if cfg.watch_enabled and not RESTART_MARKER.is_file():
+            spawn_watcher()
         await router.close()
         await registry.close()
 

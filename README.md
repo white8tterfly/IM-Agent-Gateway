@@ -254,14 +254,15 @@ python manage.py config check   # 检查通道必填项、白名单与 Agent 前
 
 工作流程：待命进程只加载通道，收到消息时先回一条占位文案并把消息写入交接文件，随后启动完整服务；服务读取交接文件重新处理该消息，并通过 `send_push` 回传结果；空闲超过阈值后退出，待命进程重新接管。
 
-Windows 开机自启：
+Windows 开机自启无需手动安装：只要 `WATCH_ENABLED=1` 且 `WATCH_AUTOSTART=1`，服务启动时会自动写入当前用户的开机启动项（`HKCU\...\Run`，无需管理员权限），关闭开关时自动移除；服务每次优雅退出前会拉起待命进程，形成「睡-醒」闭环。待命进程自身带进程锁，开机启动项、服务退出拉起等多个来源同时启动也只会保留一个实例。
+
+历史遗留的计划任务可用下面的脚本卸载（如已装过）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1             # 安装
-powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall  # 卸载
+powershell -ExecutionPolicy Bypass -File scripts\install_watcher.ps1 -Uninstall
 ```
 
-计划任务使用 `pythonw.exe` 启动待命进程，拉起服务与探测进程时也带无窗口参数，登录后不会弹出命令行窗口。开启 `WATCH_ENABLED=1` 后，应由待命进程常驻监听，不要再手动长期运行 `main.py`，两者会争抢同一条机器人长连接。
+待命进程与服务都使用 `pythonw.exe` 无窗口运行。开启 `WATCH_ENABLED=1` 后，应由待命进程常驻监听；手动启动服务时，待命进程检测到服务在跑会主动让出长连接，不会互踢。
 
 ## Web 控制台
 
@@ -329,7 +330,7 @@ python manage.py webui
 ## 常见问题
 
 - **连接反复重连**：部分 IM 只允许一条长连接。确认没有其他程序订阅同一账号；开启消息唤醒后，待命进程与服务任一时刻只能有一个持连接。
-- **开启消息唤醒后服务没被启动**：确认 `WATCH_ENABLED=1`、`WATCH_AUTOSTART=1`，且已执行 `scripts\install_watcher.ps1` 安装计划任务；再查看 `logs/im_agent_gateway.log`。
+- **开启消息唤醒后服务没被启动**：确认 `WATCH_ENABLED=1`、`WATCH_AUTOSTART=1`，并至少完整启动过一次服务（服务会在退出时拉起待命进程、启动时写入开机启动项）；再查看 `logs/im_agent_gateway.log` 中是否有「看门狗启动」。
 - **回复乱码或超时**：查看 `logs/im_agent_gateway.log`；超时可调大对应 Agent 的超时配置。
 - **聊天不可用**：确认对话 Agent 的 API Key 有效，且 `python manage.py config check` 没有提示缺项。
 - **Agent 显示不可用**：前置条件未满足（未安装 CLI、未登录或未配凭证）；满足后执行 `python manage.py agent on <名称>`。

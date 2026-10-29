@@ -23,9 +23,13 @@ from im_agent_gateway.gateway.watch_http import WatchHttpServer
 from im_agent_gateway.i18n import t
 from im_agent_gateway.plugins import load_channel
 
-from main import setup_logging
+from main import acquire_instance_lock, setup_logging
 
 logger = logging.getLogger("watcher")
+
+# 待命进程单实例锁：与服务的 service.lock 同理，避免开机启动项、服务退出时拉起
+# 等来源同时启动多个看门狗，抢同一条 IM 长连接互踢。
+_LOCK_FILE = Path(__file__).parent / "logs" / "watchdog.lock"
 
 # Windows 下创建子进程时不新开控制台窗口。pythonw 启动的看门狗本身没有控制台，
 # 若不指定，探测进程与拉起服务的 PowerShell / python 都会各弹一个黑窗。
@@ -59,6 +63,16 @@ def _restart_pending(max_age: float = 60.0) -> bool:
         return time.time() - RESTART_MARKER.stat().st_mtime < max_age
     except OSError:
         return False
+
+
+async def _wait_service_exit() -> None:
+    """服务在跑时先让位：同一机器人只允许一条长连接，双向抢连接互踢。
+
+    用户在看门狗待命期间手动启动服务（桌面快捷方式），或服务退出瞬间看门狗
+    被拉起时，都靠这里等对方退出后再接管。
+    """
+    while await asyncio.to_thread(_service_running):
+        await asyncio.sleep(5)
 
 
 async def _await_handoff() -> None:
@@ -187,10 +201,17 @@ async def amain() -> None:
         logger.info(t("开机自动启动已关闭，本次不启动看门狗",
                       "Autostart on boot is disabled; not starting the watchdog"))
         return
+    # 单实例：已有待命进程（如开机启动项与服务退出时拉起同时发生）则静默退出
+    lock = acquire_instance_lock(wait=0, path=_LOCK_FILE)
+    if lock is None:
+        logger.info(t("已有待命进程在运行，本次启动退出",
+                      "Another watchdog is already running; exiting"))
+        return
     logger.info(t("看门狗启动，监听通道：%s", "Watchdog started; listening on channels: %s"),
                 ", ".join(cfg.channels))
     while True:
         try:
+            await _wait_service_exit()
             await _session(cfg)
         except asyncio.CancelledError:
             raise
