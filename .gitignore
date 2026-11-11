@@ -11,6 +11,7 @@ venv/
 logs/
 status
 .first_use.json
+.last_agents.json
 
 # 发布打包产物
 dist/

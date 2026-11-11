@@ -94,14 +94,14 @@ def test_webui_command() -> None:
     cfg2.webui_host = "0.0.0.0"
     cfg2.webui_port = 8790
     out = MessageRouter(cfg2, AgentRegistry())._webui_text()
-    check("电脑端 管理台：http://127.0.0.1:8790" in out, "webui 指令：电脑端管理台地址")
-    check("http://127.0.0.1:8790/chat.html" in out, "webui 指令：电脑端聊天台地址")
+    check("| 电脑端 | http://127.0.0.1:8790 | http://127.0.0.1:8790/chat.html |" in out,
+          "webui 指令：电脑端管理台与聊天台同一行")
     check("手机端" in out, "webui 指令：单独列出手机端地址")
 
     # 显式监听局域网地址时按配置输出，电脑端与手机端同一地址
     cfg2.webui_host = "192.168.1.8"
     out = MessageRouter(cfg2, AgentRegistry())._webui_text()
-    check("手机端 聊天台：http://192.168.1.8:8790/chat.html" in out,
+    check("| 手机端 | http://192.168.1.8:8790 | http://192.168.1.8:8790/chat.html |" in out,
           "webui 指令：监听局域网地址时按配置输出手机端地址")
 
 
@@ -175,10 +175,45 @@ async def test_first_use_guide() -> None:
         check(len(channel.sent) == 1, "关闭开关后不发提示")
 
 
+async def test_wake_resume_agent() -> None:
+    """休眠-唤醒：重启后该会话默认沿用最后实际处理的 Agent，/agent auto 可清除。"""
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / ".last_agents.json"
+        cfg = make_cfg(auto_route=False, default_agent="alpha")
+        registry = AgentRegistry()
+        registry.register(FakeAgent("alpha"), active=True)
+        registry.register(FakeAgent("beta", kind="coding"), active=True)
+
+        router = MessageRouter(cfg, registry, last_agents_file=path)
+        router._remember_agent("s:u1", "beta")
+        check(path.is_file(), "最后使用的 Agent 已落盘")
+
+        # 模拟休眠退出后唤醒：新实例读同一文件，直接恢复该会话的默认 Agent
+        router2 = MessageRouter(cfg, registry, last_agents_file=path)
+        check(router2.chat_agents.get("s:u1") == "beta", "唤醒后恢复为会话默认 Agent")
+        picked = await router2._resolve_agent("s:u1", "今天天气怎么样")
+        check(picked is not None and picked.name == "beta", "唤醒后的消息仍交给该 Agent")
+
+        # /agent auto：清掉记录，唤醒不再自动回到某个 Agent
+        channel = FakeChannel()
+        msg = InboundMessage(
+            channel=channel, im="feishu", msg_id="m1", user_id="u1", chat_id="",
+            chat_type="single", msg_type="text", content="/agent auto", reply_token="t1",
+        )
+        await router2._handle_agent("s:u1", "auto", msg)
+        check("s:u1" not in router2.chat_agents and not router2._last_agents,
+              "/agent auto 清除会话记录")
+
+        router3 = MessageRouter(cfg, registry, last_agents_file=path)
+        picked = await router3._resolve_agent("s:u1", "随便聊聊")
+        check(picked is not None and picked.name == "alpha", "清除后唤醒回到默认 Agent")
+
+
 async def main() -> None:
     test_webui_command()
     await test_webui_dispatch()
     await test_first_use_guide()
+    await test_wake_resume_agent()
 
     # ===== 一、固定路由不受两级改造影响 =====
     cfg = make_cfg(default_agent="chat1")

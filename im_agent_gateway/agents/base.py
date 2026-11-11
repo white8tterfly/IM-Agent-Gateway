@@ -7,13 +7,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Awaitable, Callable, ClassVar
 
-from ..i18n import t
+from ..i18n import get_language, t
 
 logger = logging.getLogger(__name__)
+
+# 用途 → 展示名括注（中文 / 英文）；展示名里的用途由 kind 实时生成，
+# AGENT_KINDS 改了用途，管理台、/status、/help 等所有出现名字的地方一起变
+KIND_TAGS = {
+    "chat": ("对话", "Chat"),
+    "coding": ("编码", "Coding"),
+    "office": ("办公", "Office"),
+}
+# 展示名结尾的用途括注：「Qoder CN（编码）」/「Qoder CN (Coding)」；
+# 只认已知用途词，其它括号（如「Translator（契约示例）」）保持原样不动
+_LABEL_TAG_RE = re.compile(r"\s*[（(]\s*([^（）()]*?)\s*[）)]\s*$")
+_KIND_TAG_TEXTS = {tag.lower() for pair in KIND_TAGS.values() for tag in pair} | {"聊天"}
 
 
 @dataclass
@@ -32,6 +45,22 @@ class CommandSpec:
 
     usage: str  # 用法示例，如 "/cd <目录>"
     brief: str  # 一句话说明
+
+
+def md_table(
+    header: tuple[str, ...] | list[str],
+    rows: list[tuple[str, ...] | list[str]],
+) -> list[str]:
+    """把行列渲染成 markdown 表格。
+
+    能渲染 markdown 的通道直接显示表格，不支持的会原样显示源码，行列关系仍清楚。
+    注意：单元格内容里不能出现竖线，会被当成列分隔符导致内容被拆散，改用斜杠列举。
+    """
+    head = [str(c) for c in header]
+    lines = ["| " + " | ".join(head) + " |",
+             "| " + " | ".join("---" for _ in head) + " |"]
+    lines.extend("| " + " | ".join(str(c) for c in row) + " |" for row in rows)
+    return lines
 
 
 class BaseAgent(ABC):
@@ -59,8 +88,20 @@ class BaseAgent(ABC):
 
     @property
     def display_label(self) -> str:
-        """当前语言下的展示名。"""
-        return t(self.label, self.label_en or self.label)
+        """当前语言下的展示名：基础名 + 当前用途括注。
+
+        括注不写死在 label 里，而是按 self.kind 实时生成，所以 AGENT_KINDS
+        改了用途后，管理台、/status、/agent、/help 等处的名字会同步变化。
+        """
+        raw = t(self.label, self.label_en or self.label).strip()
+        tag = KIND_TAGS.get(self.kind)
+        m = _LABEL_TAG_RE.search(raw)
+        # 名称里本来没有用途括注（如第三方 Agent）就不硬加，保持它自己的叫法
+        if m is None or m.group(1).strip().lower() not in _KIND_TAG_TEXTS or tag is None:
+            return raw
+        base = raw[:m.start()].strip() or raw
+        text = t(tag[0], tag[1])
+        return f"{base} ({text})" if get_language() == "en" else f"{base}（{text}）"
 
     @property
     def available(self) -> bool:
@@ -194,12 +235,14 @@ class BaseAgent(ABC):
                 return True
             current = self.model_for(chat_key) or self.default_model or t("默认", "default")
             lines = [t(f"{self.display_label} 可用模型（前 30 个，共 {len(models)}）：",
-                       f"{self.display_label} models (first 30 of {len(models)}):")]
-            for name in models[:30]:
-                mark = t(" ← 当前会话", " ← current") if name.lower() == current.lower() else ""
-                lines.append(f"• {name}{mark}")
-            lines.append(t(f"\n当前使用: {current}（/model <模型名> 切换）",
-                           f"\nCurrent: {current} (use /model <name> to switch)"))
+                       f"{self.display_label} models (first 30 of {len(models)}):"),
+                     ""]
+            lines.extend(md_table((t("模型", "Model"), t("状态", "State")), [
+                (name, t("当前会话", "current") if name.lower() == current.lower() else "")
+                for name in models[:30]]))
+            lines.append("")
+            lines.append(t(f"当前使用：{current}（/model <模型名> 切换）",
+                           f"Current: {current} (use /model <name> to switch)"))
             await send("\n".join(lines))
             return True
         if cmd == "/stop":

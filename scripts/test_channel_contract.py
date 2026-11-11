@@ -137,12 +137,12 @@ async def main() -> None:
     check(echo.frames and echo.frames[0][1].startswith("· Mini（契约示例）处理中"),
           "任务开始提示经通道 send_stream 下发")
     check(any("echo:你好" in c for _, c in echo.frames), "过程输出经 on_output 流式回传到通道")
-    check(echo.frames[-1][0] and "· 模型 " in echo.frames[-1][1],
-          "任务结束帧 finish=True 且附模型摘要")
+    check(echo.frames[-1][0] and "| 模型 |" in echo.frames[-1][1],
+          "任务结束帧 finish=True 且附模型摘要表格")
 
     await echo.on_message(echo.make_msg("/help"))
     check(any("IM-Agent Gateway 指令帮助" in t for t in echo.texts), "指令回复经通道 send_text 下发")
-    check(any("【Mini（契约示例）】" in t for t in echo.texts), "/help 按注册数据（label）分组展示")
+    check(any("**Mini（契约示例）**" in t for t in echo.texts), "/help 按注册数据（label）分组展示")
 
     # ===== 四、main.py 同款组装循环：配置声明驱动，零代码改动 =====
     gw2 = Gateway()

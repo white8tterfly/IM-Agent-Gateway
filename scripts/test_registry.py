@@ -189,7 +189,8 @@ async def main() -> None:
     msg = ch1.make_msg("/help")
     await ch1.on_message(msg)
     check(any("IM-Agent Gateway 指令帮助" in s for s in ch1.sent), "/help 回发帮助文本")
-    check(any("fake_chat|fake_code|fake_broken" in s for s in ch1.sent), "/help 动态文案含全部注册名")
+    # 帮助表格的单元格里不能出现竖线（会被 markdown 当成列分隔符），名称用斜杠列举
+    check(any("fake_chat / fake_code / fake_broken" in s for s in ch1.sent), "/help 动态文案含全部注册名")
 
     non_text = ch1.make_msg("x")
     non_text.msg_type = "image"
@@ -204,9 +205,10 @@ async def main() -> None:
     await ch1.on_message(ch1.make_msg("帮我修复这个 bug"))
     check(chat_agent.submits and not code_agent.submits, "关闭的 coding Agent 不路由，fallback 到开启的 Agent")
 
-    # 任务结尾摘要：Agent / 模型（无 usage 数据时不附带用量）
+    # 任务结尾摘要：模型、用时与用量做成一行小表格
     last_finish = [s for s in ch1.sent if s.startswith("[stream:True]")][-1]
-    check("· 模型 fake-model" in last_finish, "任务结尾附上模型摘要")
+    check("| 模型 | 用时 | Token 用量 |" in last_finish and "| fake-model |" in last_finish,
+          "任务结尾附上模型摘要表格")
 
     # 运行时开启 fake_code 后，编码意图命中它
     check(registry.set_active("fake_code", True) is None, "set_active 开启成功返回 None")
@@ -297,8 +299,8 @@ async def main() -> None:
     ch1.sent.clear()
     await ch1.on_message(ch1.make_msg("/help"))
     help_text = "\n".join(ch1.sent)
-    check("【编码 Fake2】" in help_text and "/ping" in help_text, "/help 按 Agent 分组展示特有指令")
-    check("【聊天 Fake】" in help_text and "/model <模型>" in help_text, "/help 分组含通用指令")
+    check("**编码 Fake2**" in help_text and "/ping" in help_text, "/help 按 Agent 分组展示特有指令")
+    check("**聊天 Fake**" in help_text and "/model <模型>" in help_text, "/help 分组含通用指令")
     check("切换路由 Agent" in help_text, "/help 框架段保留切换 Agent 命令说明")
 
     # ===== 四、事件与生命周期 =====

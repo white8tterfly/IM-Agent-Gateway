@@ -19,7 +19,7 @@ from typing import Callable
 
 from ...config import Config
 from ...i18n import t
-from ..base import BaseAgent, CommandSpec
+from ..base import BaseAgent, CommandSpec, md_table
 
 logger = logging.getLogger(__name__)
 
@@ -236,18 +236,25 @@ class QoderRunner(BaseAgent):
                              f"Switched to workspace {arg}: {ws.resolve()}"))
                 return True
             current = Path(self.cwd_for(chat_key)).resolve()
-            lines = [t("工作区列表：", "Workspaces:")]
+            lines = [t("**工作区列表**", "**Workspaces**"), ""]
             if self.cfg.workspaces:
+                rows = []
                 for name, path in self.cfg.workspaces.items():
-                    mark = t(" ← 当前", " ← current") if path.expanduser().resolve() == current else ""
-                    missing = t("（不存在）", " (missing)") if not path.is_dir() else ""
-                    lines.append(f"• {name}: {path}{missing}{mark}")
+                    state = []
+                    if path.expanduser().resolve() == current:
+                        state.append(t("当前", "current"))
+                    if not path.is_dir():
+                        state.append(t("不存在", "missing"))
+                    rows.append((name, str(path), " · ".join(state)))
+                lines.extend(md_table(
+                    (t("名称", "Name"), t("路径", "Path"), t("状态", "State")), rows))
             else:
-                lines.append(t("（未配置命名工作区，可在 .env 的 WORKSPACES 中添加）",
-                               "(No named workspaces; add WORKSPACES in .env)"))
-            lines.append(t(f"\n默认目录: {self.cfg.qoder_cwd_resolved}",
-                           f"\nDefault directory: {self.cfg.qoder_cwd_resolved}"))
-            lines.append(t("切换: /ws <名称> 或 /cd <目录>",
+                lines.append(t("（未配置命名工作区，可在管理台「工作区列表」中添加）",
+                               "(No named workspaces; add them in the console's workspace list)"))
+            lines.append("")
+            lines.append(t(f"默认目录：{self.cfg.qoder_cwd_resolved}",
+                           f"Default directory: {self.cfg.qoder_cwd_resolved}"))
+            lines.append(t("切换：/ws <名称> 或 /cd <目录>",
                            "Switch: /ws <name> or /cd <dir>"))
             await send("\n".join(lines))
             return True

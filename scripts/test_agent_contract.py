@@ -179,7 +179,7 @@ async def main() -> None:
 
     ch.texts.clear()
     await ch.on_message(ch.make_msg("/help"))
-    check(any("【Translator（契约示例）】" in t and "/lang <语言>" in t for t in ch.texts),
+    check(any("**Translator（契约示例）**" in t and "/lang <语言>" in t for t in ch.texts),
           "/help 按 label 分组并展示特有指令")
 
     ch.texts.clear()

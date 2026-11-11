@@ -39,7 +39,7 @@ async def main() -> None:
 
     router = MessageRouter(cfg, registry)
     help_text = router._help_text()
-    check("【Trae（编码）】" in help_text, "/help 自动出现 Trae 指令分组")
+    check("**Trae（编码）**" in help_text, "/help 自动出现 Trae 指令分组")
 
     # ===== 二、真实任务（联网，经 SiliconFlow 端点） =====
     first = await agent.submit("s:smoke", "用一句话回答：1+1等于几？不要使用任何工具，直接回答。")

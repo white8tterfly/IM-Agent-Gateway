@@ -29,6 +29,30 @@ def new_req_id() -> str:
     return uuid.uuid4().hex
 
 
+def _is_block_line(line: str) -> bool:
+    """列表项/表格行/引用：markdown 本就按行渲染，不需要额外空行。"""
+    return line.lstrip().startswith(("- ", "* ", "|", ">"))
+
+
+def markdown_breaks(content: str) -> str:
+    """把纯文本的换行转成 markdown 段落换行。
+
+    企微智能机器人的回复内容是 markdown：单个 "\n" 只当空格处理，相邻行会被
+    合并成一整段，/help、/status 这类多行文本在手机上就挤成一行。这里在相邻
+    段落间补一个空行；列表项之间保持单换行，让紧凑列表仍是一行一条。
+    """
+    lines = [ln.rstrip() for ln in content.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+             if ln.strip()]
+    parts: list[str] = []
+    for i, line in enumerate(lines):
+        parts.append(line)
+        if i + 1 == len(lines):
+            break
+        tight = _is_block_line(line) and _is_block_line(lines[i + 1])
+        parts.append("\n" if tight else "\n\n")
+    return "".join(parts)
+
+
 class WeComBotClient:
     """维护一条到企业微信智能机器人服务的 WebSocket 长连接。"""
 
@@ -246,7 +270,8 @@ class WeComBotClient:
             "headers": {"req_id": req_id},
             "body": {
                 "msgtype": "stream",
-                "stream": {"id": new_req_id(), "finish": True, "content": content},
+                "stream": {"id": new_req_id(), "finish": True,
+                           "content": markdown_breaks(content)},
             },
         })
 
