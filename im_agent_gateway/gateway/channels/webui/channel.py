@@ -185,7 +185,13 @@ class WebUIChannel(IMChannel):
         config = uvicorn.Config(self.app, host=self.host, port=self.port,
                                 log_level="warning")
         self._server = uvicorn.Server(config)
-        await self._server.serve()
+        try:
+            await self._server.serve()
+        except SystemExit:
+            # uvicorn 在端口绑定失败（如旧实例刚退出、端口仍在 TIME_WAIT）时
+            # 会直接 sys.exit(1)。这里只放弃本通道，不能让整个服务跟着退出，
+            # 否则 IM 通道也会一并掉线
+            pass
         if not self._server.started:
             # 端口被占用等启动失败：只放弃本通道，不拖垮其他 IM 通道
             logger.error(t("webui HTTP 启动失败（端口 %s 可能被占用），Web 控制台不可用",

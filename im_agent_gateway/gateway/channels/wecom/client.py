@@ -84,7 +84,9 @@ class WeComBotClient:
             # 且对协议层 ping 帧可能报 invalid opcode/incorrect masking，
             # 心跳改用应用层 JSON ping（见 _heartbeat_loop）
             ping_interval=None,
-            close_timeout=5,
+            # 关闭握手最多等 1 秒（超时后 websockets 直接 abort）：企微网关不回
+            # 关闭帧，等 5 秒会让唤醒/退出凭空多花 4 秒
+            close_timeout=1,
             max_size=4 * 1024 * 1024,
             # 企微网关不支持 permessage-deflate：大消息触发压缩帧（RSV1 位）
             # 会被服务端以 1002 "reserved bits must be 0" 踢掉，必须禁用压缩

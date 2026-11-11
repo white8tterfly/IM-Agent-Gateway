@@ -170,8 +170,6 @@ async def amain() -> None:
     # 路径独立于计划任务安装脚本，打开开关后无需再手动注册。
     sync_autostart(cfg)
 
-    check_prereqs(cfg)
-
     # Agent 接入：按 .env 的 AGENTS 声明加载，实现 BaseAgent 并暴露 Agent 类即可接入
     registry = AgentRegistry()
     for spec in cfg.agents:
@@ -237,6 +235,9 @@ async def amain() -> None:
         run_task = asyncio.create_task(gateway.run())
         stop_task = asyncio.create_task(shutdown.wait())
         tasks = {run_task, stop_task}
+        # 前置检查只产出告警日志，放到线程里跑：Windows 上 shutil.which 每个约
+        # 0.4 秒，同步执行会把唤醒/启动凭空拖慢 1 秒以上
+        _prereq_task = asyncio.create_task(asyncio.to_thread(check_prereqs, cfg))
         # 看门狗唤醒交接：等服务建立长连接后重放待处理消息
         await replay_pending(router, gateway, cfg)
         # 空闲监控常驻：IDLE_EXIT 可在管理台热开关，退出与否由监控循环判断

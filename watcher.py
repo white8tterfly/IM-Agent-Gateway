@@ -23,6 +23,7 @@ from im_agent_gateway.gateway.watch_http import WatchHttpServer
 from im_agent_gateway.i18n import t
 from im_agent_gateway.plugins import load_channel
 
+from main import LOCK_FILE as SERVICE_LOCK
 from main import acquire_instance_lock, setup_logging
 
 logger = logging.getLogger("watcher")
@@ -38,20 +39,27 @@ _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def _service_running() -> bool:
-    """检测是否已有服务进程在运行，避免唤醒时与手动启动的服务抢连接。"""
+    """检测是否已有服务进程在运行，避免唤醒时与手动启动的服务抢连接。
+
+    服务启动后独占 logs/service.lock，这里非阻塞试抢同一把锁即可：抢不到
+    说明服务正在运行。早期实现每次唤醒都拉起 PowerShell 查进程（2-3 秒），
+    是唤醒慢的主因；试锁只要几毫秒。
+    """
     if sys.platform != "win32":
         return False
+    import msvcrt
+
     try:
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-CimInstance Win32_Process -Filter \"Name='python.exe' OR Name='pythonw.exe'\""
-             " | Where-Object { $_.CommandLine -like '*main.py*' }"
-             " | Measure-Object | Select-Object -ExpandProperty Count"],
-            capture_output=True, text=True, timeout=10,
-            creationflags=_NO_WINDOW,
-        )
-        return result.stdout.strip() not in ("", "0")
-    except Exception:
+        SERVICE_LOCK.parent.mkdir(parents=True, exist_ok=True)
+        with open(SERVICE_LOCK, "a+") as handle:
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                return True  # 锁被占用：服务正在运行
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            return False
+    except OSError:
         logger.exception(t("检测服务进程失败，按未运行处理",
                            "Failed to detect the service process; assuming it is not running"))
         return False
