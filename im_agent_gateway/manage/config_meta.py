@@ -31,14 +31,14 @@ CONFIG_META: list[ConfigItem] = [
     # ---------- 常用配置 ----------
     ConfigItem(
         "AGENTS", "agents", "接入哪些智能体",
-        "服务启动时加载哪些智能体，用英文逗号隔开；改完重启生效",
-        "Agents to load", "Which agents to load at startup, comma separated; restart required",
+        "服务启动时加载哪些智能体，勾选即可；改完重启生效",
+        "Agents to load", "Which agents to load at startup, tick to select; restart required",
         advanced=False),
     ConfigItem(
         "ENABLED_AGENTS", "enabled_agents", "默认开启的智能体",
-        "哪些智能体一开始就开启，用英文逗号隔开，留空表示全部开启；管理台的开关会实时改写这一项",
+        "哪些智能体一开始就开启，留空表示全部开启；管理台的开关会实时改写这一项",
         "Agents enabled by default",
-        "Which agents start enabled, comma separated, empty means all; console toggles rewrite this",
+        "Which agents start enabled, empty means all; console toggles rewrite this",
         advanced=False),
     ConfigItem(
         "DEFAULT_AGENT", "default_agent", "默认交给哪个智能体",
@@ -57,15 +57,15 @@ CONFIG_META: list[ConfigItem] = [
         type="bool", advanced=False),
     ConfigItem(
         "AGENT_KINDS", "agent_kinds", "智能体用途分配",
-        "给智能体指定用途，自动选路按用途匹配。格式：名称=用途（office 办公 / chat 对话 / coding 编码），逗号分隔",
+        "给每个智能体选一个用途，自动选路会按用途匹配：对话 / 编码 / 办公",
         "Agent purposes",
-        "Assign a purpose per agent for routing. Format: name=purpose (office / chat / coding), comma separated",
+        "Pick a purpose per agent for routing: chat / coding / office",
         advanced=False),
     ConfigItem(
         "AGENT_COMPLEXITY", "agent_complexity", "智能体难度档位",
-        "同一用途配了多个智能体时，按问题难度分档。格式：名称=档位（simple 简单 / mid 中等 / complex 复杂），逗号分隔",
+        "同一用途配了多个智能体时，按问题难度分档：简单 / 中等 / 复杂",
         "Agent complexity tiers",
-        "Tier agents of the same purpose by question difficulty. Format: name=tier (simple / mid / complex), comma separated",
+        "Tier agents of the same purpose by question difficulty: simple / medium / complex",
         advanced=False),
     ConfigItem(
         "COMPLEXITY_ROUTE", "complexity_route", "按难度自动选智能体",
@@ -75,9 +75,9 @@ CONFIG_META: list[ConfigItem] = [
         type="bool", advanced=False),
     ConfigItem(
         "ALLOWED_USERS", "allowed_users", "谁可以使用",
-        "允许使用机器人的用户 ID，用英文逗号隔开，留空表示不限制；用了网页控制台要确保 webui 在名单里",
+        "允许使用机器人的用户 ID，逐个添加即可，留空表示不限制；用了网页控制台要确保 webui 在名单里",
         "Allowed users",
-        "User IDs allowed to use the bot, comma separated, empty means unrestricted; include webui if using the console",
+        "User IDs allowed to use the bot, add one by one, empty means unrestricted; include webui if using the console",
         advanced=False),
     ConfigItem(
         "IDLE_EXIT", "idle_exit", "空闲自动休息开关",
@@ -130,9 +130,9 @@ CONFIG_META: list[ConfigItem] = [
     # ---------- 高级设置：通道凭证与细节 ----------
     ConfigItem(
         "CHANNELS", "channels", "接入哪些消息通道",
-        "服务启动加载哪些 IM 通道，用英文逗号隔开：wecom 企业微信、feishu 飞书",
+        "服务启动加载哪些 IM 通道：企业微信、飞书；网页控制台由「网页控制台开关」自动接入",
         "IM channels",
-        "Which IM channels to load at startup, comma separated: wecom, feishu",
+        "Which IM channels to load at startup: WeCom, Feishu; the web console joins automatically via its switch",
         advanced=False),
     ConfigItem(
         "BOT_ID", "bot_id", "企微机器人 ID",
@@ -192,9 +192,9 @@ CONFIG_META: list[ConfigItem] = [
         "Qoder model", "Empty uses the CLI default; send /models to list available models"),
     ConfigItem(
         "QODER_PERMISSION_MODE", "qoder_permission_mode", "Qoder 权限模式",
-        "accept_edits 自动接受文件编辑（无人值守必备）；default 每次编辑需确认",
+        "自动接受文件编辑适合无人值守；每次编辑需确认更稳妥",
         "Qoder permission mode",
-        "accept_edits auto-accepts file edits (needed for unattended use); default asks every time"),
+        "Auto-accept edits suits unattended use; confirming each edit is safer"),
     ConfigItem(
         "QODER_TIMEOUT_SEC", "qoder_timeout_sec", "Qoder 任务超时",
         "单次任务最长运行秒数，超时终止进程",
@@ -242,6 +242,21 @@ CONFIG_META: list[ConfigItem] = [
         "Also stream the model's reasoning process",
         type="bool"),
 
+    # ---------- 高级设置：DeepSeek 对话智能体 ----------
+    ConfigItem(
+        "DEEPSEEK_API_KEY", "deepseek_api_key", "DeepSeek 密钥",
+        "DeepSeek 对话智能体调用官方平台的 API 密钥；不接 DeepSeek 可留空",
+        "DeepSeek API key", "API key used by the DeepSeek chat agent; leave empty if unused",
+        sensitive=True),
+    ConfigItem(
+        "DEEPSEEK_BASE_URL", "deepseek_base_url", "DeepSeek 接口地址",
+        "DeepSeek 官方 OpenAI 兼容接口地址，一般无需修改",
+        "DeepSeek base URL", "DeepSeek's OpenAI-compatible endpoint, usually no change needed"),
+    ConfigItem(
+        "DEEPSEEK_MODEL", "deepseek_model", "DeepSeek 模型",
+        "默认对话模型（如 deepseek-flash），完整列表可发 /models 查看",
+        "DeepSeek model", "Default chat model (e.g. deepseek-flash); send /models for the full list"),
+
     # ---------- 高级设置：WorkBuddy 细节 ----------
     ConfigItem(
         "WORKBUDDY_BIN", "workbuddy_bin", "WorkBuddy 命令行路径",
@@ -253,9 +268,9 @@ CONFIG_META: list[ConfigItem] = [
         "WorkBuddy model", "Empty uses the CLI default"),
     ConfigItem(
         "WORKBUDDY_PERMISSION_MODE", "workbuddy_permission_mode", "WorkBuddy 权限模式",
-        "acceptEdits 自动接受编辑；auto / dontAsk 跳过确认；plan 只读计划",
+        "自动接受编辑适合无人值守；自动确认 / 不再询问会跳过确认；只读计划只看不改",
         "WorkBuddy permission mode",
-        "acceptEdits auto-accepts edits; auto / dontAsk skip confirmation; plan is read-only"),
+        "Auto-accept edits suits unattended use; auto / don't-ask skip confirmation; plan is read-only"),
     ConfigItem(
         "WORKBUDDY_TIMEOUT_SEC", "workbuddy_timeout_sec", "WorkBuddy 任务超时",
         "单次任务最长运行秒数，超时终止进程",
@@ -264,8 +279,8 @@ CONFIG_META: list[ConfigItem] = [
     # ---------- 高级设置：消息流与杂项 ----------
     ConfigItem(
         "WORKSPACES", "workspaces", "命名工作区列表",
-        "聊天里用 /ws 命令列出与切换。格式：名称=路径;名称2=路径2",
-        "Named workspaces", "List and switch with /ws in chat. Format: name=path;name2=path2"),
+        "聊天里用 /ws 命令列出与切换，可逐个新增或删除",
+        "Named workspaces", "List and switch with /ws in chat; add or remove entries one by one"),
     ConfigItem(
         "STREAM_INTERVAL_SEC", "stream_interval_sec", "流式推送间隔",
         "流式消息两次推送的最小间隔秒数，企微限流 30 条每分钟",

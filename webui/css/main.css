@@ -42,13 +42,26 @@
   /* 尺寸与节奏 */
   --radius: 18px;
   --radius-sm: 12px;
-  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+  /* 全站字体只在这里改：西文用 Inter，中文按系统可用性依次回退，
+     确保正文、控件、代码块里的中文都是同一套字形 */
+  --font-ui: "Inter", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei",
+    "Noto Sans SC", system-ui, sans-serif;
+  /* 等宽字体同样带上中文字体：避免代码块 / 配置值里的中文落到宋体，
+     与页面其他位置不一致 */
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New",
+    "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", monospace;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   /* 弹簧曲线：轻微过冲，按压缩小 / 入场回弹的来源 */
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 * { box-sizing: border-box; margin: 0; }
+
+/* 表单控件默认不继承字体：统一成页面字体，避免按钮 / 输入框 / 下拉里的中文换字形 */
+button, input, select, textarea, option { font-family: inherit; }
+
+/* 展开后的选项跟随页面配色：不让系统默认的蓝底高亮破坏灰绿调 */
+select option { background: #fff; color: var(--ink); }
 
 html, body { height: 100%; }
 
@@ -59,7 +72,7 @@ body {
     radial-gradient(900px 520px at 0% 104%, rgba(138, 107, 66, 0.06), transparent 58%),
     var(--paper);
   color: var(--ink);
-  font: 15px/1.65 "Inter", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font: 15px/1.65 var(--font-ui);
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
@@ -560,7 +573,7 @@ body.ready .card { animation: none; }
 }
 
 #status-body .metric-sub {
-  font-family: "Inter", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0;
@@ -572,7 +585,7 @@ body.ready .card { animation: none; }
 #status-body .metric-value.ok {
   align-items: center;
   gap: 10px;
-  font-family: "Inter", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 24px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -836,18 +849,26 @@ body.ready .card { animation: none; }
 }
 
 .log-picker select {
+  appearance: none;
+  -webkit-appearance: none;
   height: 34px;
-  padding: 0 8px;
-  border: 1.5px solid var(--line);
-  border-radius: 9px;
-  background: var(--card-soft);
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2369706b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
 }
+
+.log-picker select:hover { border-color: var(--brand-bright); background-color: var(--card); }
 
 .log-picker select:focus {
   border-color: var(--brand);
@@ -862,7 +883,7 @@ body.ready .card { animation: none; }
   color: #dbe4dc;
   border-radius: var(--radius-sm);
   padding: 12px 0;
-  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.75;
   scrollbar-width: thin;
@@ -1280,7 +1301,7 @@ details summary:active { transform: scale(0.97); }
   border-radius: 8px;
   background: var(--card-soft);
   box-shadow: inset 0 0 0 1px var(--line-soft);
-  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-soft);
   overflow: hidden;
@@ -1290,7 +1311,7 @@ details summary:active { transform: scale(0.97); }
 }
 
 .cfg-mask {
-  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 2px;
   color: var(--muted);
@@ -1319,7 +1340,7 @@ details summary:active { transform: scale(0.97); }
   border-radius: 6px;
   background: var(--card-soft);
   box-shadow: inset 0 0 0 1px var(--line);
-  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--ink-soft);
 }
@@ -1342,7 +1363,8 @@ details summary:active { transform: scale(0.97); }
 
 .cfg-editor-field { min-width: 0; }
 
-.cfg-editor input {
+.cfg-editor input[type="text"],
+.cfg-editor input[type="number"] {
   width: 100%;
   border: 1.5px solid var(--line);
   border-radius: 10px;
@@ -1355,10 +1377,241 @@ details summary:active { transform: scale(0.97); }
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.cfg-editor input:focus {
+.cfg-editor input[type="text"]:focus,
+.cfg-editor input[type="number"]:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 4px rgba(95, 113, 103, 0.12);
 }
+
+/* ---------- 行内直改控件：下拉与勾选，改完即保存 ---------- */
+
+/* 固定宽度：同一列里的下拉与勾选共用一条左边界，不会逐行参差 */
+.cfg-control-inline {
+  width: 420px;
+  max-width: 100%;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* 保存中：整组控件变淡且不可点，避免连续改动互相覆盖 */
+.cfg-row.saving .cfg-control-inline {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+/* 下拉：与输入框同一套圆角与高度，自绘箭头，宽度跟随控制栏 */
+.cfg-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 36px;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2369706b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  transition: border-color 0.18s, box-shadow 0.18s, background-color 0.18s;
+}
+
+.cfg-select:hover { border-color: var(--brand-bright); background-color: var(--card); }
+
+.cfg-select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px rgba(95, 113, 103, 0.12);
+}
+
+/* 逐 Agent 下拉：两列表格，名称在左、下拉在右，列宽统一 */
+.cfg-agentmap {
+  display: grid;
+  gap: 8px 14px;
+  width: 100%;
+  min-width: 0;
+}
+
+.cfg-agentmap-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 158px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.cfg-agentmap-name {
+  min-width: 0;
+  padding-right: 2px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cfg-agentmap-kind { color: var(--muted); }
+
+/* 逐 Agent 下拉占多行时，左侧说明改为顶部对齐，避免文字悬在控件中间 */
+.cfg-row-top { align-items: start; }
+
+.cfg-row-top .cfg-main { padding-top: 7px; }
+
+/* 勾选：等宽多列排布，逐行对齐，最后一行不会单独被挤到右边 */
+.cfg-inline-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.cfg-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 13px 6px 11px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.2s var(--spring);
+}
+
+/* 标签过长时省略，胶囊宽度仍与同列保持一致 */
+.cfg-pill > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cfg-pill-auto { flex-shrink: 0; }
+
+.cfg-pill:hover { box-shadow: inset 0 0 0 1.5px var(--brand-bright); }
+.cfg-pill:active { transform: scale(0.97); }
+.cfg-pill:focus-within { box-shadow: inset 0 0 0 1.5px var(--brand), 0 0 0 4px rgba(95, 113, 103, 0.12); }
+
+/* 原生复选框隐藏，用伪元素画方块与对勾，保证跨浏览器一致 */
+.cfg-pill input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cfg-pill::before {
+  content: "";
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+
+.cfg-pill.on,
+.cfg-pill:has(input:checked) {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  box-shadow: inset 0 0 0 1.5px rgba(91, 113, 102, 0.32);
+}
+
+.cfg-pill.on::before,
+.cfg-pill:has(input:checked)::before {
+  background-color: var(--brand);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='7' viewBox='0 0 9 7'%3E%3Cpath d='M1 3.4L3.4 5.8 8 1.2' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow: none;
+}
+
+/* 派生项（网页控制台）：只读，状态由对应开关决定 */
+.cfg-pill.locked { cursor: default; }
+.cfg-pill.locked:active { transform: none; }
+
+.cfg-pill-auto {
+  font-style: normal;
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(91, 113, 102, 0.14);
+  color: var(--brand-deep);
+}
+
+/* 标签清单：逐个添加 / 删除 */
+.cfg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cfg-tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--card-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.cfg-tag-del {
+  border: 0;
+  background: transparent;
+  padding: 0 1px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cfg-tag-del:hover { color: var(--danger); }
+
+.cfg-tag-add { display: flex; gap: 8px; }
+.cfg-tag-add input { flex: 1; }
+
+/* 数值：滑块粗调 + 数字框精调，两者同一行 */
+.cfg-number-edit { display: flex; align-items: center; gap: 16px; }
+.cfg-number-edit > input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+.cfg-number-edit input[type="number"] { width: 116px; flex: 0 0 auto; }
+
+/* 数字 + 单位 */
+.cfg-number { display: flex; align-items: center; gap: 8px; }
+.cfg-unit { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+/* 命名工作区：名称 / 路径 / 删除逐行排布 */
+.cfg-ws-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.cfg-ws-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 错误提示占满编辑区整行 */
+.cfg-editor > .cfg-error { grid-column: 1 / -1; }
 
 /* 保存失败的提示就地出现在输入框下方，不用弹窗打断 */
 .cfg-error {
@@ -1367,7 +1620,15 @@ details summary:active { transform: scale(0.97); }
   color: var(--danger);
 }
 
-.cfg-editor-actions { display: flex; gap: 8px; padding-top: 3px; }
+/* 操作按钮贴住输入框底部，与输入框等高，避免与「添加」按钮错位 */
+.cfg-editor-actions {
+  display: flex;
+  align-items: center;
+  align-self: end;
+  gap: 8px;
+}
+
+.cfg-editor-actions .btn { padding: 9px 20px; font-size: 13.5px; }
 
 /* 高级设置折叠区：与上方分组拉开距离 */
 .cfg-advanced {
@@ -1828,11 +2089,16 @@ details summary:active { transform: scale(0.97); }
   .chip { flex-shrink: 0; }
   .cfg-row { grid-template-columns: minmax(0, 1fr); gap: 9px; }
   .cfg-control { justify-self: start; justify-content: flex-start; max-width: none; }
+  /* 窄屏控件铺满整行，逐 Agent 下拉收窄名称列，保证下拉仍有可读宽度 */
+  .cfg-control-inline { width: 100%; }
+  .cfg-agentmap-row { grid-template-columns: minmax(0, 1fr) 132px; gap: 10px; }
   .cfg-value { text-align: left; }
   .cfg-chips { justify-content: flex-start; }
   .cfg-text { max-width: 100%; white-space: normal; word-break: break-all; }
   .cfg-editor { grid-template-columns: minmax(0, 1fr); }
   .cfg-editor-actions { justify-content: flex-end; }
+  /* 窄屏下工作区逐行改为纵向，避免路径输入被挤压 */
+  .cfg-ws-row { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* 尊重系统减弱动效设置 */

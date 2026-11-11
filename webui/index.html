@@ -554,6 +554,149 @@
   // 已保存待重启的新值（键 → 值）：轮询刷新时保持显示新值并带「待重启」角标
   const cfgPending = new Map();
 
+  // 结构化配置：智能体用途 / 档位原本要手写 `名称=值,名称=值`，这里改为逐项下拉选择
+  const CFG_AGENT_MAPS = {
+    AGENT_KINDS: () => [
+      ['', t('未设置', 'Not set')],
+      ['chat', t('对话', 'Chat')],
+      ['coding', t('编码', 'Coding')],
+      ['office', t('办公', 'Office')],
+    ],
+    AGENT_COMPLEXITY: () => [
+      ['', t('未设置', 'Not set')],
+      ['simple', t('简单', 'Simple')],
+      ['mid', t('中等', 'Medium')],
+      ['complex', t('复杂', 'Complex')],
+    ],
+  };
+
+  // 内置智能体目录：用于「接入哪些智能体」的勾选选项
+  const CFG_BUILTIN_AGENTS = () => [
+    ['siliconflow', 'SiliconFlow'],
+    ['qoder', 'Qoder'],
+    ['workbuddy', 'WorkBuddy'],
+    ['trae', 'Trae'],
+    ['deepseek', 'DeepSeek'],
+  ];
+
+  // 单选下拉：值 → 展示名
+  const CFG_SELECTS = {
+    LANGUAGE: () => [['zh', t('中文', 'Chinese')], ['en', 'English']],
+    LOG_LEVEL: () => [['DEBUG', 'DEBUG'], ['INFO', 'INFO'], ['WARNING', 'WARNING'], ['ERROR', 'ERROR']],
+    QODER_PERMISSION_MODE: () => [
+      ['accept_edits', t('自动接受编辑（无人值守）', 'Auto-accept edits (unattended)')],
+      ['default', t('每次编辑需确认', 'Confirm each edit')],
+    ],
+    WORKBUDDY_PERMISSION_MODE: () => [
+      ['acceptEdits', t('自动接受编辑', 'Auto-accept edits')],
+      ['auto', t('自动确认', 'Auto')],
+      ['dontAsk', t('不再询问', "Don't ask")],
+      ['plan', t('只读计划', 'Read-only plan')],
+    ],
+  };
+
+  // 多选（保存为英文逗号清单）；选项可按当前智能体列表动态生成
+  const CFG_MULTIS = {
+    AGENTS: () => CFG_BUILTIN_AGENTS(),
+    ENABLED_AGENTS: (agents) => agents.map((a) => [a.name, cfgAgentLabel(agents, a.name)]),
+    CHANNELS: () => [
+      ['wecom', t('企业微信', 'WeCom')],
+      ['feishu', t('飞书', 'Feishu')],
+      ['webui', t('网页控制台', 'Web console')],
+    ],
+  };
+
+  // 由其他开关自动带入的选项：列表里只读展示，保存时原样保留
+  const CFG_MULTI_DERIVED = {
+    CHANNELS: {
+      webui: () => t('由「网页控制台开关」控制，无需在这里勾选',
+        'Controlled by the Web console switch; no need to tick here'),
+    },
+  };
+
+  // 逗号分隔的标识清单：标签 + 新增按钮，不再手写逗号
+  const CFG_TAGS = new Set(['ALLOWED_USERS']);
+
+  // 数值项：滑块粗调 + 数字框精调，max 同时作为滑块上限与保存校验
+  const CFG_NUMBERS = {
+    IDLE_EXIT_MIN: { min: 1, max: 240, step: 1, unit: () => t('分钟', 'min') },
+    JEV_TIMEOUT_SEC: { min: 1, max: 60, step: 1, unit: () => t('秒', 's') },
+    QODER_TIMEOUT_SEC: { min: 1, max: 3600, step: 1, unit: () => t('秒', 's') },
+    QODER_MAX_OUTPUT_TOKENS: { min: 1, max: 32768, step: 1, unit: () => 'tokens' },
+    SF_MAX_TOKENS: { min: 1, max: 32768, step: 1, unit: () => 'tokens' },
+    SF_TIMEOUT_SEC: { min: 1, max: 600, step: 1, unit: () => t('秒', 's') },
+    WORKBUDDY_TIMEOUT_SEC: { min: 1, max: 3600, step: 1, unit: () => t('秒', 's') },
+    STREAM_INTERVAL_SEC: { min: 0, max: 10, step: 0.5, unit: () => t('秒', 's') },
+    STREAM_CHUNK_SIZE: { min: 1, max: 2000, step: 1, unit: () => t('字符', 'chars') },
+    HEARTBEAT_INTERVAL_SEC: { min: 1, max: 120, step: 1, unit: () => t('秒', 's') },
+    // 端口是任意值，滑块只会帮倒忙，只保留数字输入
+    WEBUI_PORT: { min: 1, max: 65535, step: 1, unit: () => '', slider: false },
+  };
+
+  // 比例型数值：同样用「滑块 + 数字框」编辑，单位为空
+  const CFG_RANGES = {
+    JEV_MIN_CONFIDENCE: { min: 0, max: 1, step: 0.05 },
+  };
+
+  // 命名工作区：名称=路径;名称=路径，用逐行增删维护
+  const CFG_WORKSPACES = new Set(['WORKSPACES']);
+
+  // 解析 `名称=值,名称=值`；空项与无等号的项忽略
+  function cfgParseMap(raw) {
+    const map = new Map();
+    String(raw || '').split(',').forEach((part) => {
+      const [name, value] = part.split('=').map((s) => s.trim());
+      if (name) map.set(name, value || '');
+    });
+    return map;
+  }
+
+  // 解析工作区的 `名称=路径;名称2=路径2`
+  function cfgParseWorkspaces(raw) {
+    return String(raw || '').split(';').map((s) => s.trim()).filter(Boolean).map((part) => {
+      const idx = part.indexOf('=');
+      return idx < 0
+        ? { name: part, path: '' }
+        : { name: part.slice(0, idx).trim(), path: part.slice(idx + 1).trim() };
+    });
+  }
+
+  // 智能体注册名 → 页面展示名；未登记的保留原名称
+  const cfgAgentLabel = (agents, name) =>
+    (agents.find((a) => a.name === name) || {}).label || name;
+
+  // 拆开展示名末尾的用途括注：「SiliconFlow（聊天）」→ 基础名 + 是否带用途括注；
+  // 只认已知用途词，第三方 Agent 自己的括号（如「（契约示例）」）保持原样
+  const CFG_KIND_TEXTS = ['聊天', '对话', '编码', '办公', 'Chat', 'Coding', 'Office'];
+  const cfgSplitAgentLabel = (agents, name) => {
+    const label = cfgAgentLabel(agents, name);
+    const m = label.match(/[（(]\s*([^（）()]*?)\s*[）)]\s*$/);
+    if (!m || !CFG_KIND_TEXTS.includes(m[1].trim())) return { base: label, hasKind: false };
+    return { base: label.slice(0, m.index).trim() || label, hasKind: true };
+  };
+
+  // 配置项未写时的默认值：沿用 Agent 自身声明的用途 / 档位
+  const cfgAgentDefault = (agents, name, key) => {
+    const meta = agents.find((a) => a.name === name) || {};
+    return (key === 'AGENT_COMPLEXITY' ? meta.complexity : meta.kind) || '';
+  };
+
+  // 值 → 展示名；未知值原样返回
+  const cfgOptionText = (options, value) =>
+    ((options.find(([v]) => v === value) || [])[1]) || value;
+
+  // 保存成功后的统一提示：热生效直接提示，冷生效且值确实变化才标待重启
+  function cfgHandleSaved(it, value, res) {
+    if (res.hot) {
+      toast(t('已生效', 'Applied'));
+    } else if (value !== it.value) {
+      cfgPending.set(it.key, value);
+      toast(t('已保存，重启服务后生效', 'Saved; takes effect after a restart'));
+    } else {
+      toast(t('已保存', 'Saved'));
+    }
+  }
+
   // 界面分组：只决定配置在页面里的归类与顺序，接口仍按常用 / 高级返回
   const CFG_GROUPS = [
     {
@@ -663,10 +806,19 @@
   }
 
   // 值的展示：空值说「未设置」，敏感项打码，短逗号清单拆成标签，其余单行省略
-  function cfgValueHtml(it) {
+  function cfgValueHtml(it, agents = []) {
     const shown = cfgShown(it);
     if (!shown) return `<span class="cfg-empty">${t('未设置', 'Not set')}</span>`;
     if (it.sensitive) return '<span class="cfg-mask">••••••••</span>';
+    // 工作区：展示「名称 → 路径」
+    if (CFG_WORKSPACES.has(it.key)) {
+      return `<span class="cfg-chips">${cfgParseWorkspaces(shown)
+        .map((w) => `<span class="vchip">${esc(w.name)} → ${esc(w.path)}</span>`).join('')}</span>`;
+    }
+    // 数值：带单位展示，避免只看到一串数字
+    if (CFG_NUMBERS[it.key]) {
+      return `<span class="cfg-text">${esc(shown)} ${esc(CFG_NUMBERS[it.key].unit())}</span>`;
+    }
     const parts = shown.split(',').map((s) => s.trim()).filter(Boolean);
     if (parts.length > 1 && parts.length <= 6 && shown.length <= 80) {
       return `<span class="cfg-chips">${parts
@@ -675,8 +827,163 @@
     return `<span class="cfg-text" title="${esc(shown)}">${esc(shown)}</span>`;
   }
 
+  // 下拉 / 勾选 / 逐项下拉这类配置：直接展示控件，改完立即保存，不用先点「修改」
+  const cfgIsInline = (key) =>
+    !!(CFG_SELECTS[key] || CFG_MULTIS[key] || CFG_AGENT_MAPS[key]) || key === 'DEFAULT_AGENT';
+
+  // 正在保存的控件数：期间暂停轮询重建，避免选择被旧值刷回去
+  let cfgSaving = 0;
+
+  // 下拉选项：默认智能体取自当前已加载的智能体列表
+  function cfgSelectOptions(it, agents) {
+    if (it.key === 'DEFAULT_AGENT') {
+      const names = agents.map((a) => a.name);
+      const current = cfgShown(it);
+      if (current && !names.includes(current)) names.unshift(current);
+      return [['', t('不指定（自动选路兜底）', 'Not set (routing fallback)')],
+        ...names.map((name) => [name, cfgAgentLabel(agents, name)])];
+    }
+    return CFG_SELECTS[it.key]();
+  }
+
+  // 当前值不在选项里时补一项，避免保存时被静默改掉
+  function cfgFillOptions(options, current) {
+    const opts = options.map(([value, label]) => [value, label]);
+    if (current && !opts.some(([value]) => value === current)) opts.push([current, current]);
+    return opts;
+  }
+
+  const cfgOptionHtml = (options, current) => options.map(([value, label]) =>
+    `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`).join('');
+
+  // 行内控件 HTML：逐 Agent 下拉 / 多选胶囊 / 单选下拉
+  function cfgInlineHtml(it, agents) {
+    const current = cfgShown(it);
+    if (CFG_AGENT_MAPS[it.key]) {
+      const options = CFG_AGENT_MAPS[it.key]();
+      const cur = cfgParseMap(current);
+      // 已加载的智能体 + 配置里已有但本次未加载的名称，保存时不丢历史设置
+      const names = agents.map((a) => a.name);
+      cur.forEach((_v, name) => { if (!names.includes(name)) names.push(name); });
+      if (!names.length) {
+        return `<span class="cfg-empty">${t('还没有可配置的智能体', 'No agents available to configure')}</span>`;
+      }
+      const kindOptions = CFG_AGENT_MAPS.AGENT_KINDS();
+      return `<div class="cfg-agentmap">${names.map((name) => {
+        // 配置里没写这项时，下拉直接显示 Agent 自带的默认用途 / 档位
+        const saved = cur.get(name) || '';
+        const value = saved || cfgAgentDefault(agents, name, it.key);
+        const extra = value && !options.some(([v]) => v === value)
+          ? `<option value="${esc(value)}" selected>${esc(value)}</option>` : '';
+        // 名称后的括注跟随 Agent 当前用途，改用途后立即同步（第三方自定义括号不动）
+        const { base, hasKind } = cfgSplitAgentLabel(agents, name);
+        const kind = cfgAgentDefault(agents, name, 'AGENT_KINDS');
+        const kindText = kind ? `（${cfgOptionText(kindOptions, kind)}）` : '';
+        return `<label class="cfg-agentmap-row">
+          <span class="cfg-agentmap-name">${esc(base)}${hasKind ? `<span class="cfg-agentmap-kind">${esc(kindText)}</span>` : ''}</span>
+          <select class="cfg-select" data-agent="${esc(name)}">${extra}${cfgOptionHtml(options, value)}</select>
+        </label>`;
+      }).join('')}</div>`;
+    }
+    if (CFG_MULTIS[it.key]) {
+      const options = CFG_MULTIS[it.key](agents).slice();
+      String(current || '').split(',').map((s) => s.trim()).filter(Boolean).forEach((name) => {
+        if (!options.some(([value]) => value === name)) options.push([name, name]);
+      });
+      const picked = new Set(String(current || '').split(',').map((s) => s.trim()).filter(Boolean));
+      const derived = CFG_MULTI_DERIVED[it.key] || {};
+      return `<div class="cfg-inline-checks">${options.map(([value, label]) => {
+        const on = picked.has(value);
+        const note = derived[value];
+        // 派生项（网页控制台）：只读展示，状态由对应开关决定，保存时原样保留
+        if (note) {
+          return `<label class="cfg-pill locked${on ? ' on' : ''}" title="${esc(note())}">
+            <input type="checkbox" value="${esc(value)}"${on ? ' checked' : ''} disabled>
+            <span>${esc(label)}</span><em class="cfg-pill-auto">${t('自动', 'Auto')}</em>
+          </label>`;
+        }
+        return `<label class="cfg-pill${on ? ' on' : ''}">
+          <input type="checkbox" value="${esc(value)}"${on ? ' checked' : ''}>
+          <span>${esc(label)}</span>
+        </label>`;
+      }).join('')}</div>`;
+    }
+    return `<select class="cfg-select" data-select>${cfgOptionHtml(
+      cfgFillOptions(cfgSelectOptions(it, agents), current), current)}</select>`;
+  }
+
+  // 控件事件：任何一次改动都立即写回，失败由提示告知并按后端值回滚
+  function cfgWireInline(row, it, agents = []) {
+    const control = row.querySelector('.cfg-control');
+    if (CFG_AGENT_MAPS[it.key]) {
+      control.addEventListener('change', (e) => {
+        const sel = e.target.closest('select[data-agent]');
+        if (!sel) return;
+        // 用途改完立刻同步名称后的括注，不用等保存回包
+        if (it.key === 'AGENT_KINDS') {
+          const kindEl = sel.closest('.cfg-agentmap-row').querySelector('.cfg-agentmap-kind');
+          if (kindEl) {
+            // 选「未设置」时回落到 Agent 自带用途，括注仍然有意义
+            const kind = sel.value || cfgAgentDefault(agents, sel.dataset.agent, 'AGENT_KINDS');
+            const text = kind ? cfgOptionText(CFG_AGENT_MAPS.AGENT_KINDS(), kind) : '';
+            kindEl.textContent = text ? `（${text}）` : '';
+          }
+        }
+        // 和 Agent 默认值相同、且原本没写进配置的项不写回，避免把默认值固化成覆写
+        const savedMap = cfgParseMap(cfgShown(it));
+        const picked = [];
+        control.querySelectorAll('select[data-agent]').forEach((el) => {
+          const name = el.dataset.agent;
+          if (!el.value) return;
+          if (el.value === cfgAgentDefault(agents, name, it.key) && !savedMap.has(name)) return;
+          picked.push(`${name}=${el.value}`);
+        });
+        cfgSaveInline(row, it, picked.join(','));
+      });
+      return;
+    }
+    if (CFG_MULTIS[it.key]) {
+      control.addEventListener('change', (e) => {
+        const input = e.target.closest('input[type="checkbox"]');
+        if (!input) return;
+        input.closest('.cfg-pill').classList.toggle('on', input.checked);
+        const value = [...control.querySelectorAll('input[type="checkbox"]:checked')]
+          .map((el) => el.value).join(',');
+        cfgSaveInline(row, it, value);
+      });
+      return;
+    }
+    const sel = control.querySelector('select[data-select]');
+    sel.addEventListener('change', () => cfgSaveInline(row, it, sel.value));
+  }
+
+  // 改完即保存：保存期间整行控件变淡且不可点，避免连续改动互相覆盖
+  async function cfgSaveInline(row, it, value) {
+    if (value === cfgShown(it)) return;
+    cfgSaving += 1;
+    row.classList.add('saving');
+    try {
+      const res = await setConfig(it.key, value);
+      if (!res.ok) {
+        alert(res.error || t('保存没有成功，请稍后再试', 'Saving failed, please try again later'));
+      } else {
+        cfgHandleSaved(it, value, res);
+      }
+    } catch (_) {
+      alert(t('连接服务失败，请稍后再试', 'Could not reach the service, please try again later'));
+    } finally {
+      cfgSaving -= 1;
+      row.classList.remove('saving');
+    }
+    // 全部保存结束后再重建，落定最终值（失败时也回到后端的真实值）
+    if (cfgSaving === 0) {
+      lastConfigSig = '';
+      renderConfig(true).catch(() => {});
+    }
+  }
+
   // 渲染单条配置行；editable=false 为未登记只读行（没有修改入口）
-  function cfgRow(it, editable) {
+  function cfgRow(it, editable, agents = []) {
     const row = document.createElement('div');
     row.className = 'cfg-row';
     row.dataset.key = it.key;
@@ -728,48 +1035,59 @@
       return row;
     }
 
+    // 下拉 / 勾选类：直接展示控件，改完即保存（无需先点「修改」）
+    if (editable && cfgIsInline(it.key)) {
+      // 逐 Agent 下拉会占多行，左侧说明改为顶部对齐
+      if (CFG_AGENT_MAPS[it.key]) row.classList.add('cfg-row-top');
+      row.innerHTML = `${head}
+        <div class="cfg-control cfg-control-inline">${cfgInlineHtml(it, agents)}</div>`;
+      cfgWireInline(row, it, agents);
+      return row;
+    }
+
     // 文本项：当前值 + 修改按钮（只读行只展示值）
     row.innerHTML = `${head}
       <div class="cfg-control">
-        <div class="cfg-value">${cfgValueHtml(it)}</div>
+        <div class="cfg-value">${cfgValueHtml(it, agents)}</div>
         ${editable ? `<button type="button" class="btn ghost small cfg-edit-btn">${t('修改', 'Edit')}</button>` : ''}
       </div>`;
     if (editable) {
-      row.querySelector('.cfg-edit-btn').addEventListener('click', () => cfgStartEdit(row, it));
+      row.querySelector('.cfg-edit-btn').addEventListener('click', () => cfgStartEdit(row, it, agents));
     }
     return row;
   }
 
   // 点「修改」：行下方展开通栏编辑区，保存失败时在输入框下方就地显示错误
-  function cfgStartEdit(row, it) {
+  function cfgStartEdit(row, it, agents = []) {
     cfgEditKey = it.key;
     row.classList.add('editing');
     const editBtn = row.querySelector('.cfg-edit-btn');
     if (editBtn) editBtn.disabled = true;
 
+    // 按配置类型选择控件：标签 / 工作区 / 数值（滑块 + 输入）/ 文本
+    // （下拉与勾选已在行内直接保存，不会走到这里）
+    if (CFG_TAGS.has(it.key)) { cfgStartTagsEdit(row, it); return; }
+    if (CFG_WORKSPACES.has(it.key)) { cfgStartWorkspacesEdit(row, it); return; }
+    if (CFG_NUMBERS[it.key]) { cfgStartNumberEdit(row, it, CFG_NUMBERS[it.key]); return; }
+    if (CFG_RANGES[it.key]) { cfgStartNumberEdit(row, it, CFG_RANGES[it.key]); return; }
+    cfgStartTextEdit(row, it);
+  }
+
+  // 通用编辑区骨架：挂载、错误提示、保存 / 取消；collect 返回要写入的值（null = 直接关闭）
+  function cfgMountEditor(row, it, bodyHtml, collect, { enterSaves = false, focus = null } = {}) {
     const box = document.createElement('div');
     box.className = 'cfg-editor';
-    // 敏感项不在输入框里回填 ******（避免误当成真实值提交）：留空保存 = 保持不变
-    box.innerHTML = `
-      <div class="cfg-editor-field">
-        <input type="text" value="${it.sensitive ? '' : esc(cfgShown(it))}"
-               placeholder="${it.sensitive ? t('留空保持不变，填写新值则更换', 'Leave blank to keep; enter a new value to replace')
-                                           : t('填写新的值', 'Enter a new value')}"
-               autocomplete="off" spellcheck="false">
-        <p class="cfg-error hidden"></p>
-      </div>
+    box.innerHTML = `${bodyHtml}
       <div class="cfg-editor-actions">
-        <button type="button" class="btn small">${t('保存', 'Save')}</button>
-        <button type="button" class="btn ghost small">${t('取消', 'Cancel')}</button>
-      </div>`;
+        <button type="button" class="btn small" data-save>${t('保存', 'Save')}</button>
+        <button type="button" class="btn ghost small" data-cancel>${t('取消', 'Cancel')}</button>
+      </div>
+      <p class="cfg-error hidden"></p>`;
     row.appendChild(box);
 
-    const input = box.querySelector('input');
     const errBox = box.querySelector('.cfg-error');
-    const saveBtn = box.querySelector('.btn:not(.ghost)');
-    input.focus();
-    if (!it.sensitive) input.select();
-
+    const saveBtn = box.querySelector('[data-save]');
+    const cancelBtn = box.querySelector('[data-cancel]');
     const showErr = (msg) => {
       errBox.textContent = msg;
       errBox.classList.remove('hidden');
@@ -781,44 +1099,218 @@
       renderConfig(true).catch(() => {});
     };
     const save = async () => {
-      const value = input.value.trim();
-      if (it.sensitive && !value) { done(); return; } // 敏感项留空 = 不修改
+      let value;
+      try {
+        value = collect(box);
+      } catch (err) {
+        showErr(err && err.message ? err.message : t('请检查填写的内容', 'Please check the input'));
+        return;
+      }
+      if (value === null) { done(); return; }
       saveBtn.disabled = true;
       try {
         const res = await setConfig(it.key, value);
         if (!res.ok) {
           showErr(res.error || t('保存没有成功，请稍后再试', 'Saving failed, please try again later'));
           saveBtn.disabled = false;
-          input.focus();
           return;
         }
-        if (res.hot) {
-          toast(t('已生效', 'Applied'));
-        } else if (value !== it.value) {
-          cfgPending.set(it.key, value);
-          toast(t('已保存，重启服务后生效', 'Saved; takes effect after a restart'));
-        } else {
-          toast(t('已保存', 'Saved'));
-        }
+        cfgHandleSaved(it, value, res);
       } catch (_) {
         showErr(t('连接服务失败，请稍后再试', 'Could not reach the service, please try again later'));
         saveBtn.disabled = false;
-        input.focus();
         return;
       }
       done();
     };
 
     saveBtn.addEventListener('click', save);
-    box.querySelector('.btn.ghost').addEventListener('click', done);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); save(); }
-      if (e.key === 'Escape') done();
+    cancelBtn.addEventListener('click', done);
+    if (enterSaves) {
+      // 数值编辑区第一个 input 是滑块，回车保存要绑到所有输入控件上
+      box.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') done();
+        });
+      });
+    }
+    if (focus) {
+      try { focus(box); } catch (_) { /* 聚焦失败不影响编辑 */ }
+    }
+    return box;
+  }
+
+  // 文本 / 密钥：敏感项留空表示保持不变
+  function cfgStartTextEdit(row, it) {
+    const body = `
+      <div class="cfg-editor-field">
+        <input type="text" value="${it.sensitive ? '' : esc(cfgShown(it))}"
+               placeholder="${it.sensitive ? t('留空保持不变，填写新值则更换', 'Leave blank to keep; enter a new value to replace')
+                                           : t('填写新的值', 'Enter a new value')}"
+               autocomplete="off" spellcheck="false">
+      </div>`;
+    cfgMountEditor(row, it, body, (box) => {
+      const value = box.querySelector('input').value.trim();
+      return it.sensitive && !value ? null : value;
+    }, {
+      enterSaves: true,
+      focus: (box) => {
+        const input = box.querySelector('input');
+        input.focus();
+        if (!it.sensitive) input.select();
+      },
+    });
+  }
+
+  // 标签清单：逐个「添加 / 删除」，不用手写逗号
+  function cfgStartTagsEdit(row, it) {
+    const tags = String(cfgShown(it) || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const body = `
+      <div class="cfg-editor-field">
+        ${tags.length ? `<div class="cfg-tags">
+          ${tags.map((value) => `<span class="cfg-tag-item" data-value="${esc(value)}">
+            <span>${esc(value)}</span>
+            <button type="button" class="cfg-tag-del" aria-label="${t('删除', 'Remove')}">×</button>
+          </span>`).join('')}
+        </div>` : ''}
+        <div class="cfg-tag-add">
+          <input type="text" class="cfg-tag-input"
+                 placeholder="${t('输入后点「添加」', 'Type a value, then click Add')}" autocomplete="off">
+          <button type="button" class="btn ghost small" data-add>${t('添加', 'Add')}</button>
+        </div>
+      </div>`;
+    const box = cfgMountEditor(row, it, body, (b) =>
+      [...b.querySelectorAll('.cfg-tag-item')].map((el) => el.dataset.value).join(','));
+
+    // 空清单时不渲染容器，首次添加时补建，避免空容器多出一段间距
+    const tagsBox = () => {
+      let list = box.querySelector('.cfg-tags');
+      if (!list) {
+        list = document.createElement('div');
+        list.className = 'cfg-tags';
+        box.querySelector('.cfg-editor-field').prepend(list);
+      }
+      return list;
+    };
+
+    const addTag = () => {
+      const input = box.querySelector('.cfg-tag-input');
+      const value = input.value.trim();
+      if (!value) return;
+      if ([...box.querySelectorAll('.cfg-tag-item')].some((el) => el.dataset.value === value)) {
+        input.value = '';
+        return;
+      }
+      const item = document.createElement('span');
+      item.className = 'cfg-tag-item';
+      item.dataset.value = value;
+      item.innerHTML = `<span>${esc(value)}</span>
+        <button type="button" class="cfg-tag-del" aria-label="${t('删除', 'Remove')}">×</button>`;
+      tagsBox().appendChild(item);
+      input.value = '';
+      input.focus();
+    };
+    box.querySelector('[data-add]').addEventListener('click', addTag);
+    box.querySelector('.cfg-tag-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+    });
+    box.querySelector('.cfg-editor-field').addEventListener('click', (e) => {
+      const del = e.target.closest('.cfg-tag-del');
+      if (del) del.closest('.cfg-tag-item').remove();
+    });
+    box.querySelector('.cfg-tag-input').focus();
+  }
+
+  // 数值：滑块粗调 + 数字框精调，两者联动；保存前做范围校验
+  function cfgStartNumberEdit(row, it, conf) {
+    const current = cfgShown(it);
+    const unit = conf.unit ? conf.unit() : '';
+    const withSlider = conf.slider !== false;
+    const body = `
+      <div class="cfg-editor-field">
+        <div class="cfg-number-edit">
+          ${withSlider ? `<input type="range" min="${conf.min}" max="${conf.max}"
+                 step="${conf.step}" value="${esc(current)}" aria-label="${esc(it.label)}">` : ''}
+          <div class="cfg-number">
+            <input type="number" value="${esc(current)}" min="${conf.min}" max="${conf.max}"
+                   step="${conf.step}" inputmode="decimal">
+            ${unit ? `<span class="cfg-unit">${esc(unit)}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    const box = cfgMountEditor(row, it, body, (b) => {
+      const raw = b.querySelector('input[type="number"]').value.trim();
+      const num = Number(raw);
+      if (!raw || Number.isNaN(num)) throw new Error(t('请填写数字', 'Please enter a number'));
+      if (conf.min !== undefined && num < conf.min) {
+        throw new Error(t(`不能小于 ${conf.min}`, `Must be at least ${conf.min}`));
+      }
+      if (conf.max !== undefined && num > conf.max) {
+        throw new Error(t(`不能大于 ${conf.max}`, `Must be at most ${conf.max}`));
+      }
+      return String(num);
+    }, { enterSaves: true, focus: (b) => b.querySelector('input[type="number"]').select() });
+
+    const range = box.querySelector('input[type="range"]');
+    const number = box.querySelector('input[type="number"]');
+    if (range) {
+      // 拖滑块实时回填数字框；输入数字则同步滑块位置（超出范围自动夹到两端）
+      range.addEventListener('input', () => { number.value = range.value; });
+      number.addEventListener('input', () => {
+        const num = Number(number.value);
+        if (number.value !== '' && !Number.isNaN(num)) range.value = String(num);
+      });
+    }
+  }
+
+  // 命名工作区：逐行填写名称与路径，可新增 / 删除
+  function cfgStartWorkspacesEdit(row, it) {
+    const rowHtml = (name, path) => `
+      <div class="cfg-ws-row">
+        <input type="text" data-name placeholder="${t('名称', 'Name')}" value="${esc(name)}">
+        <input type="text" data-path placeholder="${t('目录路径', 'Directory path')}" value="${esc(path)}">
+        <button type="button" class="btn ghost small" data-del>${t('删除', 'Remove')}</button>
+      </div>`;
+    const body = `
+      <div class="cfg-editor-field">
+        <div class="cfg-ws-list">${cfgParseWorkspaces(cfgShown(it))
+          .map((w) => rowHtml(w.name, w.path)).join('')}</div>
+        <button type="button" class="btn ghost small" data-add-ws>${t('新增工作区', 'Add workspace')}</button>
+      </div>`;
+    const box = cfgMountEditor(row, it, body, (b) => {
+      const parts = [];
+      b.querySelectorAll('.cfg-ws-row').forEach((rowEl) => {
+        const name = rowEl.querySelector('[data-name]').value.trim();
+        const path = rowEl.querySelector('[data-path]').value.trim();
+        if (!name && !path) return;
+        if (!name || !path) {
+          throw new Error(t('工作区名称和路径要成对填写', 'Both name and path are required'));
+        }
+        if (name.includes('=') || name.includes(';') || path.includes(';')) {
+          throw new Error(t('名称和路径不能包含 = 或 ;', 'Name and path cannot contain = or ;'));
+        }
+        parts.push(`${name}=${path}`);
+      });
+      return parts.join(';');
+    });
+
+    const list = box.querySelector('.cfg-ws-list');
+    const bindDel = (rowEl) => rowEl.querySelector('[data-del]')
+      .addEventListener('click', () => rowEl.remove());
+    list.querySelectorAll('.cfg-ws-row').forEach(bindDel);
+    box.querySelector('[data-add-ws]').addEventListener('click', () => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = rowHtml('', '');
+      const rowEl = tmp.firstElementChild;
+      list.appendChild(rowEl);
+      bindDel(rowEl);
+      rowEl.querySelector('[data-name]').focus();
     });
   }
 
   // 单个分组区块：标题 + 说明 + 行列表
-  function cfgSection(group, items) {
+  function cfgSection(group, items, agents = []) {
     const sec = document.createElement('section');
     sec.className = 'cfg-group';
     sec.id = `cfg-group-${group.id}`;
@@ -832,7 +1324,7 @@
       </h3>
       <p class="cfg-group-desc">${esc(t(group.desc, group.desc_en))}</p>`;
     sec.appendChild(head);
-    items.forEach((it) => sec.appendChild(cfgRow(it, true)));
+    items.forEach((it) => sec.appendChild(cfgRow(it, true, agents)));
     return sec;
   }
 
@@ -853,9 +1345,11 @@
   }
 
   async function renderConfig(force = false) {
-    // 正在编辑时不重建列表，防止输入框与已输入内容被轮询刷掉
-    if (cfgEditKey !== null) { return; }
+    // 正在编辑或正在保存时不重建列表，防止输入框与选择被轮询刷掉
+    if (cfgEditKey !== null || cfgSaving > 0) { return; }
     const cfg = await getConfig();
+    // 用途 / 档位与默认智能体的下拉选项来自当前已加载的智能体列表
+    const agents = await getAgents().catch(() => []);
     // 服务重启后配置已按新值生效：清掉与当前运行值一致的待重启标记，
     // 避免用户没做任何改动、或改动已经生效时，页面仍提示需要重启
     cfg.common.concat(cfg.advanced).forEach((it) => {
@@ -865,7 +1359,7 @@
     });
     // 指纹纳入待重启缓存与筛选状态：值未变、筛选未变时不重建 DOM
     const sig = dataHash(cfg) + '|' + dataHash([...cfgPending.entries()])
-      + '|' + cfgQuery + '|' + cfgFilter;
+      + '|' + dataHash(agents) + '|' + cfgQuery + '|' + cfgFilter;
     if (!force && sig === lastConfigSig) return;
     lastConfigSig = sig;
 
@@ -887,7 +1381,7 @@
       const items = g.keys.map((k) => all.get(k)).filter(Boolean).filter(cfgMatches);
       if (!items.length) return;
       visible += items.length;
-      host.appendChild(cfgSection(g, items));
+      host.appendChild(cfgSection(g, items, agents));
     });
 
     // 高级分组收进折叠区；搜索或筛选时自动展开，避免匹配项被藏起来
@@ -904,7 +1398,7 @@
         const items = g.keys.map((k) => all.get(k)).filter(Boolean).filter(cfgMatches);
         if (!items.length) return;
         visible += items.length;
-        adv.appendChild(cfgSection(g, items));
+        adv.appendChild(cfgSection(g, items, agents));
       });
       adv.addEventListener('toggle', () => {
         // 只有用户主动开合时才记住偏好；筛选引起的展开不覆盖它
