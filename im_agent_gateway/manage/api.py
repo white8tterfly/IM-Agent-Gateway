@@ -93,7 +93,8 @@ def create_router(service: ManageService) -> APIRouter:
                 apply(service.cfg)
         if key in ("JEV_BASE_URL", "JEV_TIMEOUT_SEC"):
             await service.router.jev.reconfigure()
-        if key in ("SF_BASE_URL", "SF_TIMEOUT_SEC", "API_KEY"):
+        if key in ("SF_BASE_URL", "SF_TIMEOUT_SEC", "API_KEY",
+                   "DEEPSEEK_BASE_URL", "DEEPSEEK_API_KEY"):
             for agent in service.registry.agents:
                 await agent.apply_config()
         if key == "LOG_LEVEL":

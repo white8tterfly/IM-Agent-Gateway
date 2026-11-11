@@ -17,7 +17,7 @@
 
 把企业微信、飞书、Web 控制台等 IM 通道接入多个 AI Agent，统一完成消息归一化、智能路由与流式回传。
 
-平台的核心是一条接入契约：新增 IM 只实现 `IMChannel`，新增 Agent 只实现 `BaseAgent`，在 `.env` 中声明即可加载。网关、路由与管理层不硬编码任何具体通道或 Agent。仓库内置的三种通道与四种 Agent 可以直接使用，也可以作为接入新实现的参考。
+平台的核心是一条接入契约：新增 IM 只实现 `IMChannel`，新增 Agent 只实现 `BaseAgent`，在 `.env` 中声明即可加载。网关、路由与管理层不硬编码任何具体通道或 Agent。仓库内置的三种通道与五种 Agent 可以直接使用，也可以作为接入新实现的参考。
 
 ## 目录
 
@@ -134,6 +134,7 @@ python main.py
 | IM 通道 | 企业微信 `wecom` | 智能机器人长连接收发消息 |
 | IM 通道 | Web 控制台 `webui` | 本机 HTTP + WebSocket，管理台与聊天台 |
 | Agent | SiliconFlow `siliconflow` | 对话：OpenAI 兼容接口、SSE 流式、多轮历史 |
+| Agent | DeepSeek `deepseek` | 对话：DeepSeek 官方平台，OpenAI 兼容接口 |
 | Agent | Qoder `qoder` | 编码：CLI 子进程、会话管理、输出解析 |
 | Agent | WorkBuddy `workbuddy` | 办公：CLI 子进程、会话续接、流式解析 |
 | Agent | Trae `trae` | 编码：开源 CLI，任务进度与结果提取 |

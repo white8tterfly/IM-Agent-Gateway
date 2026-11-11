@@ -64,6 +64,11 @@ class Config:
     sf_timeout_sec: float = 300.0
     sf_include_reasoning: bool = False
 
+    # ---- DeepSeek 聊天 Agent ----
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_model: str = "deepseek-flash"
+
     # ---- WorkBuddy 办公 Agent ----
     workbuddy_bin: str = "codebuddy"
     workbuddy_model: str = ""
@@ -187,6 +192,11 @@ class Config:
         return PROJECT_ROOT / ".first_use.json"
 
     @property
+    def last_agents_file(self) -> Path:
+        """各会话最后实际使用的 Agent：休眠前落盘，唤醒后据此恢复默认路由。"""
+        return PROJECT_ROOT / ".last_agents.json"
+
+    @property
     def wake_handoff_file_resolved(self) -> Path:
         p = Path(self.wake_handoff_file).expanduser()
         return p if p.is_absolute() else (PROJECT_ROOT / p)
@@ -283,6 +293,10 @@ HOT_PARSERS: dict[str, tuple[str, "object"]] = {
     "SF_MODEL": ("sf_model", lambda v: v or "deepseek-ai/DeepSeek-V4.1-Flash"),
     "SF_MAX_TOKENS": ("sf_max_tokens", lambda v: int(v or 4096)),
     "SF_INCLUDE_REASONING": ("sf_include_reasoning", lambda v: v.lower() in ("1", "true", "yes")),
+    # DeepSeek（api_key 每次请求读；base_url 需重建 client，由 apply_config 处理）
+    "DEEPSEEK_API_KEY": ("deepseek_api_key", lambda v: v),
+    "DEEPSEEK_MODEL": ("deepseek_model", lambda v: v or "deepseek-flash"),
+    "DEEPSEEK_BASE_URL": ("deepseek_base_url", lambda v: (v or "https://api.deepseek.com/v1").rstrip("/")),
     # Jev 网关（base_url / timeout 需重建 client，由 JevRouter.reconfigure 处理）
     "JEV_BASE_URL": ("jev_base_url", lambda v: (v or "https://ai-gateway.edgeone.link/v1").rstrip("/")),
     "JEV_TIMEOUT_SEC": ("jev_timeout_sec", lambda v: float(v or 6)),
@@ -352,6 +366,9 @@ def load_config(env_file: Path | None = None) -> Config:
         sf_max_tokens=int(_env("SF_MAX_TOKENS") or 4096),
         sf_timeout_sec=float(_env("SF_TIMEOUT_SEC") or 300),
         sf_include_reasoning=_env("SF_INCLUDE_REASONING").lower() in ("1", "true", "yes"),
+        deepseek_api_key=_env("DEEPSEEK_API_KEY"),
+        deepseek_base_url=(_env("DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1").rstrip("/"),
+        deepseek_model=_env("DEEPSEEK_MODEL") or "deepseek-flash",
         workbuddy_bin=_env("WORKBUDDY_BIN") or "codebuddy",
         workbuddy_model=_env("WORKBUDDY_MODEL"),
         workbuddy_cwd=_env("WORKBUDDY_CWD") or str(PROJECT_ROOT),

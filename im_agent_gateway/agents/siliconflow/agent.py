@@ -56,6 +56,8 @@ class SiliconFlowAgent(BaseAgent):
     kind = "chat"
     routing_hint = "日常聊天与通用问答：闲聊、知识问答、非编码话题"
     routing_hint_en = "General chat and Q&A: casual talk, knowledge questions, non-coding topics"
+    # 平台展示名：子类（如 DeepSeek）可覆写，使日志与报错文案指向实际平台
+    provider = "SiliconFlow"
 
     def __init__(self, config: Config) -> None:
         super().__init__()
@@ -68,8 +70,8 @@ class SiliconFlowAgent(BaseAgent):
     def _build_client(self) -> httpx.AsyncClient:
         """按当前 cfg 构造 httpx 客户端（base_url / timeout 可热更新）。"""
         return httpx.AsyncClient(
-            base_url=self.cfg.sf_base_url,
-            timeout=httpx.Timeout(connect=15.0, read=self.cfg.sf_timeout_sec, write=30.0, pool=15.0),
+            base_url=self._base_url,
+            timeout=httpx.Timeout(connect=15.0, read=self._timeout_sec, write=30.0, pool=15.0),
         )
 
     async def apply_config(self) -> None:
@@ -79,24 +81,50 @@ class SiliconFlowAgent(BaseAgent):
         try:
             await old.aclose()
         except Exception:
-            logger.exception(t("关闭旧 SiliconFlow 客户端异常",
-                               "Error while closing the old SiliconFlow client"))
+            logger.exception(t(f"关闭旧 {self.provider} 客户端异常",
+                               f"Error while closing the old {self.provider} client"))
 
     @property
     def available(self) -> bool:
         """是否已配置 API_KEY。"""
-        return bool(self.cfg.sf_api_key)
+        return bool(self._api_key)
 
     @property
     def default_model(self) -> str:
+        return self._model_name
+
+    # ---------- 配置读取点（子类按自己的 .env 字段覆写） ----------
+
+    @property
+    def _api_key(self) -> str:
+        return self.cfg.sf_api_key
+
+    @property
+    def _base_url(self) -> str:
+        return self.cfg.sf_base_url
+
+    @property
+    def _timeout_sec(self) -> float:
+        return self.cfg.sf_timeout_sec
+
+    @property
+    def _model_name(self) -> str:
         return self.cfg.sf_model
+
+    @property
+    def _max_tokens(self) -> int:
+        return self.cfg.sf_max_tokens
+
+    @property
+    def _include_reasoning(self) -> bool:
+        return self.cfg.sf_include_reasoning
 
     def start_hint(self, cwd: str = "", model: str = "") -> str:
         return t(f"· {self.display_label}回复中…\n\n", f"· {self.display_label} is replying…\n\n")
 
     def _headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {self.cfg.sf_api_key}",
+            "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
 
@@ -227,10 +255,10 @@ class SiliconFlowAgent(BaseAgent):
         self._trim_history(state)
 
         payload = {
-            "model": model or self.cfg.sf_model,
+            "model": model or self._model_name,
             "messages": list(state.history),
             "stream": True,
-            "max_tokens": self.cfg.sf_max_tokens,
+            "max_tokens": self._max_tokens,
             # 让 OpenAI 兼容接口在最后一个 chunk 回传 usage（token 用量）
             "stream_options": {"include_usage": True},
         }
@@ -261,7 +289,7 @@ class SiliconFlowAgent(BaseAgent):
                         usage_raw = usage_chunk
                     for choice in chunk.get("choices") or []:
                         delta = choice.get("delta") or {}
-                        if self.cfg.sf_include_reasoning:
+                        if self._include_reasoning:
                             reason = delta.get("reasoning_content") or ""
                             if reason and on_output:
                                 await on_output(f"\n[思考] {reason}\n")
@@ -272,12 +300,12 @@ class SiliconFlowAgent(BaseAgent):
                                 await on_output(text)
         except httpx.HTTPError as exc:
             return SFResult(ok=False, text="",
-                            error=t(f"SiliconFlow 请求失败: {exc}", f"SiliconFlow request failed: {exc}"))
+                            error=t(f"{self.provider} 请求失败: {exc}", f"{self.provider} request failed: {exc}"))
 
         text = "".join(collected).strip()
         if not text:
             return SFResult(ok=False, text="",
-                            error=t("SiliconFlow 返回空内容", "SiliconFlow returned an empty reply"))
+                            error=t(f"{self.provider} 返回空内容", f"{self.provider} returned an empty reply"))
         state.history.append({"role": "assistant", "content": text})
         self._trim_history(state)
         return SFResult(ok=True, text=text, usage=self._usage_line(usage_raw))
@@ -306,15 +334,14 @@ class SiliconFlowAgent(BaseAgent):
             f"/ out {completion if completion is not None else '?'}",
         )
 
-    @staticmethod
-    def _extract_error(body: str, status: int) -> str:
+    def _extract_error(self, body: str, status: int) -> str:
         try:
             data = json.loads(body)
             if isinstance(data, dict) and data.get("message"):
-                return f"SiliconFlow HTTP {status}: {data['message']}"
+                return f"{self.provider} HTTP {status}: {data['message']}"
         except json.JSONDecodeError:
             pass
-        return f"SiliconFlow HTTP {status}: {body[:200]}"
+        return f"{self.provider} HTTP {status}: {body[:200]}"
 
     @staticmethod
     def _trim_history(state: _ChatState) -> None:

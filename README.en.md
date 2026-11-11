@@ -134,6 +134,7 @@ The first run of `run.bat` creates an "IM-Agent Gateway" desktop shortcut once, 
 | IM channel | WeCom `wecom` | Messages over an intelligent bot long connection |
 | IM channel | Web console `webui` | Local HTTP + WebSocket, admin console and chat console |
 | Agent | SiliconFlow `siliconflow` | Chat: OpenAI-compatible API, SSE streaming, multi-turn history |
+| Agent | DeepSeek `deepseek` | Chat: DeepSeek official platform, OpenAI-compatible API |
 | Agent | Qoder `qoder` | Coding: CLI subprocess, session management, output parsing |
 | Agent | WorkBuddy `workbuddy` | Office: CLI subprocess, session resumption, streaming parsing |
 | Agent | Trae `trae` | Coding: open-source CLI, task progress and result extraction |
