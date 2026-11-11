@@ -1,7 +1,8 @@
 ﻿# 首次启动时在桌面创建「IM-Agent Gateway」快捷方式，只创建一次。
 # 之后不论快捷方式是否还在都不再改动：标记文件 logs\.shortcut_created 存在即跳过。
-# 快捷方式用 python.exe 运行 scripts\launch_console.py：弹出启动进度窗口，
-# 服务就绪后自动打开 Web 控制台并关闭窗口；服务本身以无窗口方式在后台运行。
+# 快捷方式目标指向项目根目录的「启动.cmd」：由它运行 scripts\launch_console.py，
+# 弹出启动进度窗口，服务就绪后自动打开 Web 控制台并关闭窗口。目标放在项目内
+# 而不是 python.exe，资源管理器右键「打开文件位置」才会定位到项目目录。
 # 需要强制重建时加 -Force（忽略标记并覆盖同名快捷方式），或双击 create_shortcut.bat。
 
 param([switch]$Force)
@@ -28,23 +29,21 @@ if ((Test-Path $Link) -and (-not $Force)) {
     exit 0
 }
 
-# 优先 python.exe（显示启动进度窗口，就绪后自动关闭）；缺失时退回 pythonw.exe
-$Python = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
-$Pythonw = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source
-if (-not $Python -and -not $Pythonw) { exit 0 }
+# 目标用项目根目录的启动脚本：文件在项目内，右键「打开文件位置」才会进项目目录
+$Launcher = Join-Path $Root "启动.cmd"
+if (-not (Test-Path $Launcher)) { exit 0 }
 
 $Shell = New-Object -ComObject WScript.Shell
 $Shortcut = $Shell.CreateShortcut($Link)
-$Target = if ($Python) { $Python } else { $Pythonw }
-$Shortcut.TargetPath = $Target
-$Shortcut.Arguments = '"' + $Entry + '"'
+$Shortcut.TargetPath = $Launcher
+$Shortcut.Arguments = ""
 $Shortcut.WorkingDirectory = $Root
 $Shortcut.WindowStyle = 1
 $Shortcut.Description = "IM-Agent Gateway"
 
-# 专用图标；缺失时退回 Python 自带图标
+# 专用图标；缺失时保留系统默认图标
 $Icon = Join-Path $Root "assets\icon.ico"
-$Shortcut.IconLocation = $(if (Test-Path $Icon) { $Icon + ",0" } else { $Target + ",0" })
+if (Test-Path $Icon) { $Shortcut.IconLocation = $Icon + ",0" }
 $Shortcut.Save()
 
 New-Item -ItemType File -Path $Marker -Force | Out-Null
